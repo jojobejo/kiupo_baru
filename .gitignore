@@ -1,0 +1,9 @@
+# CodeIgniter runtime data (cache and file-backed sessions)
+/application/cache/*
+!/application/cache/index.html
+
+# CodeIgniter runtime logs
+/application/logs/*.php
+
+# OS metadata
+.DS_Store
