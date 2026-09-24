@@ -16,7 +16,9 @@
                         </div><!-- /.col -->
                     </div><!-- /.row -->
                     <div class="card">
-                        <?php if ($s->status == 'ON PROGRESS' || $s->status == 'MENUNGGU ACC KADEP') : ?>
+                        <?php if ($s->status == 'ON PROGRESS - BELUM ACC') : ?>
+                            <a class="btn btn-block btn-warning btn-sm" href="javascript:void(0)"><i class="fas fa-user-clock"></i>&nbsp;ON PROGRESS - BELUM ACC KADEP</a>
+                        <?php elseif ($s->status == 'ON PROGRESS' || $s->status == 'MENUNGGU ACC KADEP') : ?>
                             <a class="btn btn-block btn-warning btn-sm" href=""><i class="fas fa-exclamation-triangle"></i>&nbsp;<?= $s->status ?>&nbsp;<i class="fas fa-exclamation-triangle"></i></a>
                         <?php elseif ($s->status == 'REQUEST ACC') : ?>
                             <a class="btn btn-block btn-info btn-sm" href=""><i class="fas fa-check-circle"></i>&nbsp;<?= $s->status ?>&nbsp;<i class="fas fa-check-circle"></i></a>
@@ -35,7 +37,7 @@
                                 <div class="col">
                                     <a class="btn btn-primary btn-sm btn-block" href="<?= base_url($this->session->userdata('lv') == '5' ? 'reqpicacckadep' : 'reqpic') ?>"><i class="fas fa-home"></i> <b>HOMEPAGE</b></a>
                                 </div>
-                                <?php if ($this->session->userdata('lv') == '5' && $s->status == 'MENUNGGU ACC KADEP') : ?>
+                                <?php if ($this->session->userdata('lv') == '5' && in_array($s->status, array('ON PROGRESS - BELUM ACC', 'MENUNGGU ACC KADEP'), true)) : ?>
                                     <div class="col">
                                         <button type="button" class="btn btn-success btn-sm btn-block" data-toggle="modal" data-target="#modalApprovalKadep">
                                             <i class="fas fa-clipboard-check"></i> <b>APPROVAL KADEP</b>
@@ -130,7 +132,7 @@
                                     </tbody>
                                 </table>
                             <?php endif; ?>
-                            <?php if ($s->status == 'ON PROGRESS' || $s->status == 'MENUNGGU ACC KADEP') : ?>
+                            <?php if (in_array($s->status, array('ON PROGRESS', 'ON PROGRESS - BELUM ACC', 'MENUNGGU ACC KADEP'), true)) : ?>
                                 <table class="table table-bordered table-striped mt-4 mb-2 ">
                                     <thead style="background-color: #212529; color:white;">
                                         <tr>
@@ -403,7 +405,7 @@
                             <?php endif; ?>
                         </div>
                     </div>
-                    <?php if ($this->session->userdata('lv') == '5' && $s->status == 'MENUNGGU ACC KADEP') : ?>
+                    <?php if ($this->session->userdata('lv') == '5' && in_array($s->status, array('ON PROGRESS - BELUM ACC', 'MENUNGGU ACC KADEP'), true)) : ?>
                         <div class="modal fade" id="modalApprovalKadep" tabindex="-1" role="dialog" aria-labelledby="modalApprovalKadepLabel" aria-hidden="true">
                             <div class="modal-dialog" role="document">
                                 <form action="<?= base_url('process_req_kadep') ?>" method="post" class="modal-content">
@@ -470,11 +472,14 @@
     <!-- ============================================================================================================================================================================== -->
     <!-- ============================================================================================================================================================================== -->
 <?php elseif ($this->session->userdata('lv') == '2' || is_super_admin()) : ?>
+    <?php $purchasingLocked = isset($purchasingCanProcess) && !$purchasingCanProcess; ?>
     <?php foreach ($status as $s) : ?>
         <div class="content-wrapper">
             <div class="content-header">
                 <div class="container-fluid">
-                    <?php if ($s->status == 'ON PROGRESS') : ?>
+                    <?php if ($s->status == 'ON PROGRESS - BELUM ACC') : ?>
+                        <a class="btn btn-block btn-warning btn-sm" href="javascript:void(0)"><i class="fas fa-user-clock"></i>&nbsp;ON PROGRESS - BELUM ACC KADEP</a>
+                    <?php elseif (in_array($s->status, array('ON PROGRESS', 'ON PROGRESS - ACC KADEP'), true)) : ?>
                         <a class="btn btn-block btn-warning btn-sm" href=""><i class="fas fa-exclamation-triangle"></i>&nbsp;<?= $s->status ?>&nbsp;<i class="fas fa-exclamation-triangle"></i></a>
                     <?php elseif ($s->status == 'REQUEST ACC') : ?>
                         <a class="btn btn-block btn-info btn-sm" href=""><i class="fas fa-check-circle"></i>&nbsp;<?= $s->status ?>&nbsp;<i class="fas fa-check-circle"></i></a>
@@ -516,6 +521,9 @@
                     </div>
                     <div class="card">
                         <div class="card-body">
+                            <?php if ($purchasingLocked) : ?>
+                                <div class="alert alert-warning"><i class="fas fa-user-clock"></i> Menunggu ACC KADEP. Aksi Purchasing dibuka setelah KADEP menyetujui request.</div>
+                            <?php endif; ?>
                             <div class="row mb-2">
                                 <div class="col">
                                     <h1 class="m-0">Detail Request Barang - PIC</h1>
@@ -524,7 +532,7 @@
                                     <a class="btn btn-primary btn-sm btn-block" href="<?= base_url('reqpic') ?>"><i class="fas fa-home"></i> HOME </a>
                                 </div>
                                 <div class="col">
-                                    <?php if ($s->status == 'ON PROGRESS') : ?>
+                                    <?php if (in_array($s->status, array('ON PROGRESS', 'ON PROGRESS - ACC KADEP'), true) || ($s->status == 'ON PROGRESS - BELUM ACC' && !$purchasingLocked)) : ?>
                                         <a class="btn btn-info btn-sm btn-block" href="#" data-toggle="modal" data-target="#modalrevisi"><i class="fas fa-recycle"></i> REVISI </a>
                                     <?php elseif ($s->status == 'PO REVISI') : ?>
                                         <a class="btn btn-warning btn-sm btn-block"><i class="fas fa-user-clock"></i> REVISI </a>
@@ -766,7 +774,7 @@
 
                                 <!-- STATUS : ON PROGRESS -->
 
-                            <?php elseif ($s->status == 'ON PROGRESS') : ?>
+                            <?php elseif (in_array($s->status, array('ON PROGRESS', 'ON PROGRESS - ACC KADEP'), true) || ($s->status == 'ON PROGRESS - BELUM ACC' && !$purchasingLocked)) : ?>
                                 <table class="table table-bordered table-striped mt-4 mb-2 ">
 
                                     <thead style="background-color: #212529; color:white;">

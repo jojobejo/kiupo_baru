@@ -9,6 +9,7 @@
                         <thead>
                             <tr>
                                 <td>Tanggal Request</td>
+                                <td>Jam</td>
                                 <td>Total Barang</td>
                                 <td>Keterangan</td>
                                 <td>Status</td>
@@ -19,6 +20,7 @@
                             <?php foreach ($getallreq as $g) : ?>
                                 <tr>
                                     <td><?= format_tgl_lahir($g->tgl_transaksi) ?></td>
+                                    <td><?= format_jam_24($g->create_at) ?></td>
                                     <td><?= $g->jml_item ?></td>
                                     <td><?= $g->tj_pembelian ?></td>
                                     <td>

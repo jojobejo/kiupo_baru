@@ -787,14 +787,6 @@
           <!-- MENU KADEP -->
         <?php elseif ($this->session->userdata('lv') == '5') : ?>
           <li class="nav-item">
-            <a href="<?= base_url('postatusnk') ?>" class="nav-link">
-              <i class="nav-icon fas fa-money-check"></i>
-              <p>
-                Purchase Order Status
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
             <a href="<?= base_url('reqpicacckadep') ?>" class="nav-link">
               <i class="nav-icon fas fa-clipboard-check"></i>
               <p>

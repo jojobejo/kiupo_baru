@@ -195,6 +195,7 @@ class C_Reqpic extends CI_Controller
                 htmlspecialchars($request->nm_user, ENT_QUOTES, 'UTF-8'),
                 htmlspecialchars($request->departemen, ENT_QUOTES, 'UTF-8'),
                 htmlspecialchars(function_exists('format_tgl_lahir') ? format_tgl_lahir($request->tgl_transaksi) : $request->tgl_transaksi, ENT_QUOTES, 'UTF-8'),
+                htmlspecialchars(function_exists('format_jam_24') ? format_jam_24($request->create_at) : '-', ENT_QUOTES, 'UTF-8'),
                 htmlspecialchars($request->tj_pembelian, ENT_QUOTES, 'UTF-8'),
                 $this->request_status_badge($status),
                 $this->purchase_status_badge($statusPo),
@@ -206,8 +207,44 @@ class C_Reqpic extends CI_Controller
 
     private function request_status_badge($status)
     {
+        if ($status === 'ON PROGRESS - BELUM ACC') {
+            return '<span class="btn btn-block btn-warning btn-sm m-1"><b>ON PROGRESS - BELUM ACC</b></span>';
+        }
+        if ($status === 'ON PROGRESS') {
+            return '<span class="btn btn-block btn-primary btn-sm m-1"><b>ON PROGRESS - TELAH ACC KADEP</b></span>';
+        }
+        if ($status === 'ON PROGRESS - ACC KADEP') {
+            return '<span class="btn btn-block btn-primary btn-sm m-1"><b>ON PROGRESS - ACC KADEP</b></span>';
+        }
         $class = in_array($status, array('REQUEST ACC', 'MENUNGGU ACC KADEP'), true) ? 'btn-warning' : 'btn-secondary';
         return '<span class="btn btn-block ' . $class . ' btn-sm m-1"><b>' . htmlspecialchars($status, ENT_QUOTES, 'UTF-8') . '</b></span>';
+    }
+
+    /** Server-side gate; tombol yang disembunyikan tidak cukup melindungi URL POST. */
+    private function require_purchasing_request_access($kdpo)
+    {
+        if ((string) $this->session->userdata('lv') !== '2' && !is_super_admin()) {
+            show_404();
+            return false;
+        }
+
+        $request = $this->M_Reqpic->getrequestrow($kdpo);
+        if (!$this->M_Reqpic->can_purchasing_process($request)) {
+            $this->session->set_flashdata('error', 'Request masih menunggu ACC KADEP. Purchasing dapat memprosesnya setelah KADEP menyetujui request.');
+            redirect('reqpic/detreqbarangpic/' . rawurlencode($kdpo));
+            return false;
+        }
+        return true;
+    }
+
+    private function require_purchasing_detail_access($detailId)
+    {
+        $request = $this->M_Reqpic->get_request_by_detail_id($detailId);
+        if (!$request) {
+            show_error('Detail request tidak ditemukan.', 404);
+            return false;
+        }
+        return $this->require_purchasing_request_access($request->kd_po_nk);
     }
 
     private function purchase_status_badge($status)
@@ -230,15 +267,16 @@ class C_Reqpic extends CI_Controller
             return;
         }
 
-        $data['title'] = 'Approval PO KADEP';
-        $data['getlistpic'] = $this->M_Reqpic->get_purchase_waiting_kadep(
+        // Inbox utama KADEP: seluruh pengajuan pembelian dari PIC harus
+        // diputuskan KADEP sebelum dapat diproses Purchasing.
+        $data['title'] = 'Approval Request PIC';
+        $data['requests'] = $this->M_Reqpic->getlistpicreqkadep(
             $this->session->userdata('departemen'),
-            is_super_admin()
+            $this->session->userdata('kode')
         )->result();
-
         $this->load->view('partial/header', $data);
         $this->load->view('partial/sidebar');
-        $this->load->view('content/po/Reqpic/acckadep', $data);
+        $this->load->view('content/po/Reqpic/kadep_request_approval', $data);
         $this->load->view('partial/footer');
         $this->load->view('content/po/Reqpic/datatablesreq');
     }
@@ -520,9 +558,8 @@ class C_Reqpic extends CI_Controller
                 break;
             }
 
-            // PIC submits directly to Purchasing. KADEP approval happens after
-            // Purchasing has prepared the purchase order.
-            $statusAwal = 'ON PROGRESS';
+            // Semua request PIC terlebih dahulu masuk ke inbox KADEP.
+            $statusAwal = 'ON PROGRESS - BELUM ACC';
 
             $inpdataponk = array(
                 'jns_po'        => '2',
@@ -533,6 +570,7 @@ class C_Reqpic extends CI_Controller
                 // Count on the server so a submitted form cannot change it.
                 'jml_item'      => count($tmp),
                 'status'        => $statusAwal,
+                'kadep_submitted_at' => date('Y-m-d H:i:s'),
                 'departemen'    => $dep,
                 'tj_pembelian'  => $tjuan
             );
@@ -557,7 +595,7 @@ class C_Reqpic extends CI_Controller
 
             $inputnt    = array(
                 'kd_po'         => $kdponk,
-                'isi_note'      => 'REQUEST BARU - MENUNGGU PROSES PURCHASING',
+                'isi_note'      => 'REQUEST BARU - MENUNGGU ACC KADEP',
                 'kd_user'       => $kdus,
                 'nama_user'     => $nmuser,
                 'note_for'      => '2',
@@ -770,7 +808,7 @@ class C_Reqpic extends CI_Controller
         $kdreqpo = $this->input->post('kdreqpo', true);
         $request = $this->M_Reqpic->getrequestrow($kdreqpo);
 
-        if (!$request || $request->status !== 'MENUNGGU ACC KADEP') {
+        if (!$request || !in_array($request->status, array('MENUNGGU ACC KADEP', 'ON PROGRESS - BELUM ACC'), true)) {
             $this->session->set_flashdata('error', 'Request tidak valid untuk approval KADEP.');
             redirect('reqpicacckadep');
             return;
@@ -783,12 +821,13 @@ class C_Reqpic extends CI_Controller
         }
 
         $this->M_Reqpic->updatereqnk($kdreqpo, array(
-            'status' => 'ON PROGRESS',
-            'acc_with' => $this->session->userdata('kode')
+            'status' => 'ON PROGRESS - ACC KADEP',
+            'acc_with' => $this->session->userdata('kode'),
+            'purchasing_opened_at' => date('Y-m-d H:i:s'),
         ));
         $this->M_Purchase->addNote(array(
             'kd_po' => $kdreqpo,
-            'isi_note' => 'REQUEST PIC DISETUJUI KADEP',
+            'isi_note' => 'REQUEST PIC TELAH DI ACC KADEP',
             'kd_user' => $this->session->userdata('kode'),
             'nama_user' => $this->session->userdata('nama_user'),
             'note_for' => '2',
@@ -809,7 +848,7 @@ class C_Reqpic extends CI_Controller
         $note = trim((string) $this->input->post('note_reject', true));
         $request = $this->M_Reqpic->getrequestrow($kdreqpo);
 
-        if (!$request || $request->status !== 'MENUNGGU ACC KADEP') {
+        if (!$request || !in_array($request->status, array('MENUNGGU ACC KADEP', 'ON PROGRESS - BELUM ACC'), true)) {
             $this->session->set_flashdata('error', 'Request tidak valid untuk reject KADEP.');
             redirect('reqpicacckadep');
             return;
@@ -853,12 +892,12 @@ class C_Reqpic extends CI_Controller
         $note = trim((string) $this->input->post('approval_note', true));
         $request = $this->M_Reqpic->getrequestrow($kdreqpo);
         $actions = array(
-            'ACC' => array('status' => 'ON PROGRESS', 'note' => 'REQUEST PIC DISETUJUI KADEP'),
+            'ACC' => array('status' => 'ON PROGRESS - ACC KADEP', 'note' => 'REQUEST PIC TELAH DI ACC KADEP'),
             'REJECT' => array('status' => 'PENDING', 'note' => 'REQUEST PIC DITOLAK KADEP'),
             'REVISI' => array('status' => 'REVISI PO', 'note' => 'REQUEST PIC REVISI KADEP'),
         );
 
-        if (!$request || $request->status !== 'MENUNGGU ACC KADEP' || !isset($actions[$action])) {
+        if (!$request || !in_array($request->status, array('MENUNGGU ACC KADEP', 'ON PROGRESS - BELUM ACC'), true) || !isset($actions[$action])) {
             $this->session->set_flashdata('error', 'Request atau aksi approval tidak valid.');
             redirect('reqpicacckadep');
             return;
@@ -877,10 +916,14 @@ class C_Reqpic extends CI_Controller
         }
 
         $this->db->trans_begin();
-        $this->M_Reqpic->updatereqnk($kdreqpo, array(
+        $approvalUpdate = array(
             'status' => $actions[$action]['status'],
             'acc_with' => $this->session->userdata('kode'),
-        ));
+        );
+        if ($action === 'ACC') {
+            $approvalUpdate['purchasing_opened_at'] = date('Y-m-d H:i:s');
+        }
+        $this->M_Reqpic->updatereqnk($kdreqpo, $approvalUpdate);
         $this->M_Purchase->addNote(array(
             'kd_po' => $kdreqpo,
             'isi_note' => $actions[$action]['note'] . ' - ' . $note,
@@ -975,6 +1018,9 @@ class C_Reqpic extends CI_Controller
             $data['gettrs']          = $this->M_Reqpic->gettr($kdpo)->result();
             $data['gettr']           = $this->M_Reqpic->getdetailreq($kdpo)->result();
             $data['supportingDocuments'] = $this->M_Reqpic->get_supporting_documents($kdpo);
+            $data['purchasingCanProcess'] = $this->M_Reqpic->can_purchasing_process(
+                $this->M_Reqpic->getrequestrow($kdpo)
+            );
 
             $this->load->view('partial/header', $data);
             $this->load->view('partial/sidebar');
@@ -1013,6 +1059,9 @@ class C_Reqpic extends CI_Controller
     {
         date_default_timezone_set("Asia/Jakarta");
         $idponkss       = $this->input->post('idponkss');
+        if (!$this->require_purchasing_detail_access($idponkss)) {
+            return;
+        }
         $kd_user        = $this->input->post('kduserss');
         $itemconfirm    = $this->M_Reqpic->getitemreq($idponkss)->result();
         $now            = date('Y-m-d');
@@ -1047,6 +1096,9 @@ class C_Reqpic extends CI_Controller
     public function actconfirm($id)
     {
         date_default_timezone_set("Asia/Jakarta");
+        if (!$this->require_purchasing_detail_access($id)) {
+            return;
+        }
         $itempnd        = $this->M_Reqpic->getitemreq($id)->result();
         $now            = date('Y-m-d h:m:s');
         $now1           = date('Y-m-d');
@@ -1081,6 +1133,9 @@ class C_Reqpic extends CI_Controller
     public function actpending($id, $kd)
     {
         date_default_timezone_set("Asia/Jakarta");
+        if (!$this->require_purchasing_detail_access($id)) {
+            return;
+        }
         $qty        = $this->input->post('qty_isi');
         $hrgsatuan  = $this->input->post('hrg_isi');
         $itempnd    = $this->M_Reqpic->getitemreq($id)->result();
@@ -1121,6 +1176,9 @@ class C_Reqpic extends CI_Controller
 
         $idponks        = $this->input->post('pndidponks');
         $kdponk         = $this->input->post('pndkdponk');
+        if (!$this->require_purchasing_request_access($kdponk)) {
+            return;
+        }
         $kdponks        = $this->input->post('pndkdponks');
         $jml            = $this->input->post('pndjmls');
         $kd_user        = $this->input->post('pndkduser');
@@ -1249,6 +1307,9 @@ class C_Reqpic extends CI_Controller
 
         $idponks        = $this->input->post('idpnd');
         $kdponk         = $this->input->post('kdponkpnd');
+        if (!$this->require_purchasing_request_access($kdponk)) {
+            return;
+        }
         $kdponks        = $this->input->post('kdponkspnd');
         $jml            = $this->input->post('jmlspnd');
         $kd_user        = $this->input->post('kduserpnd');
@@ -1375,6 +1436,9 @@ class C_Reqpic extends CI_Controller
     {
         //PIC ADMIN
         $kdreqpo    = $this->input->post('kdreqpo');
+        if (!$this->require_purchasing_request_access($kdreqpo)) {
+            return;
+        }
         $updatests  = array(
             'status'    => 'REQUEST ACC',
             'acc_with'  => $this->session->userdata('kode')
@@ -1402,6 +1466,9 @@ class C_Reqpic extends CI_Controller
 
         $kdponk     = $this->input->post('kdponk');
         $kdreqpo    = $this->input->post('kdreqpo');
+        if (!$this->require_purchasing_request_access($kdreqpo)) {
+            return;
+        }
         $kduser     = $this->input->post('kdpic');
         $nmuser     = $this->input->post('pic');
         $jmlitm     = $this->input->post('jml');
@@ -1505,6 +1572,9 @@ class C_Reqpic extends CI_Controller
     public function accreqpic()
     {
         $kdponk     = $this->input->post('kdponk');
+        if (!$this->require_purchasing_request_access($kdponk)) {
+            return;
+        }
         $kdponks    = $this->input->post('kdponks');
         $jml        = $this->input->post('jmls');
         $tgl        = $this->input->post('tgl');
@@ -1994,6 +2064,9 @@ class C_Reqpic extends CI_Controller
     public function po_nk_req_revisi_note()
     {
         $kdponk     = $this->input->post('kodeponk');
+        if (!$this->require_purchasing_request_access($kdponk)) {
+            return;
+        }
         $isinote    = $this->input->post('porevisi');
         $kodeuser   = $this->session->userdata('kode');
         $nmuser     = $this->session->userdata('nama_user');

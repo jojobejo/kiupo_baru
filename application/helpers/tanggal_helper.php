@@ -55,6 +55,18 @@ function format_tgl_lahir($date)
 
     return $result;
 }
+
+/** Menampilkan waktu transaksi dalam format 24 jam. */
+function format_jam_24($dateTime)
+{
+    if (empty($dateTime)) {
+        return '-';
+    }
+
+    $timestamp = strtotime($dateTime);
+    return $timestamp === false ? '-' : date('H:i', $timestamp);
+}
+
 function formatglindo($date)
 {
     date_default_timezone_set('Asia/Jakarta');

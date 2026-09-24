@@ -14,7 +14,7 @@
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <div>
                             <h3 class="mb-1">Approval Pengambilan Barang</h3>
-                            <p class="text-muted mb-0">Permohonan pengambilan dari PIC di departemen Anda.</p>
+                            <p class="text-muted mb-0">Permohonan pengambilan barang dari PIC di departemen Anda.</p>
                         </div>
                         <a href="<?= base_url('reqpicacckadep') ?>" class="btn btn-secondary btn-sm"><i class="fas fa-arrow-left"></i> Kembali</a>
                     </div>
@@ -24,6 +24,7 @@
                                 <td>PIC</td>
                                 <td>Departemen</td>
                                 <td>Tanggal Request</td>
+                                <td>Jam</td>
                                 <td>Tujuan Pembelian</td>
                                 <td>#</td>
                             </tr>
@@ -34,6 +35,7 @@
                                     <td><?= htmlspecialchars($request->nm_user, ENT_QUOTES, 'UTF-8') ?></td>
                                     <td><?= htmlspecialchars($request->departemen, ENT_QUOTES, 'UTF-8') ?></td>
                                     <td><?= htmlspecialchars($request->tgl_transaksi, ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars(format_jam_24($request->create_at), ENT_QUOTES, 'UTF-8') ?></td>
                                     <td><?= htmlspecialchars($request->tj_pembelian, ENT_QUOTES, 'UTF-8') ?></td>
                                     <td class="text-nowrap">
                                         <a href="<?= base_url('reqpic/detreqbarangpic/' . rawurlencode($request->kd_po_nk)) ?>" class="btn btn-outline-primary btn-sm" title="Lihat detail"><i class="fas fa-eye"></i></a>

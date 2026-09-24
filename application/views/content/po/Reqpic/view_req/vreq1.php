@@ -29,6 +29,7 @@
                                 <td>Nama Pengaju</td>
                                 <td>Departemen</td>
                                 <td>Tanggal Transaksi</td>
+                                <td>Jam</td>
                                 <td style="width: min-content;">Tujuan Pembelian</td>
                                 <td>Status</td>
                                 <td>Status PO</td>

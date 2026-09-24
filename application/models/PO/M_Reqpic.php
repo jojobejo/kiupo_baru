@@ -75,6 +75,7 @@ class M_Reqpic extends CI_Model
         FROM tbpo_req_nk a
         WHERE a.kd_user = '$kd' 
         AND a.status != 'DONE' AND a.status != 'PENDING'
+        ORDER BY a.tgl_transaksi DESC, a.create_at DESC
         ");
     }
 
@@ -85,6 +86,7 @@ class M_Reqpic extends CI_Model
         FROM tbpo_req_nk a
         WHERE a.departemen = 'PROMOSI SEED'
         AND a.status != 'DONE' AND a.status != 'PENDING'
+        ORDER BY a.tgl_transaksi DESC, a.create_at DESC
         ");
     }
 
@@ -95,6 +97,7 @@ class M_Reqpic extends CI_Model
         FROM tbpo_req_nk a
         WHERE a.departemen = 'PROMOSI CP'
         AND a.status != 'DONE' AND a.status != 'PENDING'
+        ORDER BY a.tgl_transaksi DESC, a.create_at DESC
         ");
     }
 
@@ -105,6 +108,7 @@ class M_Reqpic extends CI_Model
         FROM tbpo_req_nk a
         WHERE a.kd_user = '$user' 
         AND a.status = 'PENDING'
+        ORDER BY a.tgl_transaksi DESC, a.create_at DESC
         ");
     }
     public function getallreqdone($kd)
@@ -114,6 +118,7 @@ class M_Reqpic extends CI_Model
         FROM tbpo_req_nk a
         WHERE a.kd_user = '$kd' 
         AND a.status = 'DONE'
+        ORDER BY a.tgl_transaksi DESC, a.create_at DESC
         ");
     }
     public function getallpending($kd)
@@ -123,6 +128,7 @@ class M_Reqpic extends CI_Model
         FROM tbpo_req_nk a
         WHERE a.kd_user = '$kd' 
         AND a.status = 'PENDING'
+        ORDER BY a.tgl_transaksi DESC, a.create_at DESC
         ");
     }
     function input_detail_po_nk($data)
@@ -401,8 +407,8 @@ class M_Reqpic extends CI_Model
     {
         return $this->db->query("SELECT a.*
             FROM tbpo_req_nk a
-            WHERE a.status = 'ON PROGRESS' OR a.status = 'PO REVISI'
-            ORDER BY a.tgl_transaksi DESC;
+            WHERE a.status IN ('ON PROGRESS', 'ON PROGRESS - ACC KADEP', 'PO REVISI')
+            ORDER BY a.tgl_transaksi DESC, a.create_at DESC;
             ");
     }
 
@@ -420,7 +426,7 @@ class M_Reqpic extends CI_Model
         LEFT JOIN tbpo_po_nk b ON b.kd_po_req = a.kd_po_nk
         LEFT JOIN tbpo_user c ON c.kode_user = a.kd_user
         WHERE a.departemen = 'KEUANGAN' AND a.status != 'DONE' AND c.aksess_lv = '2' 
-        ORDER BY a.tgl_transaksi DESC
+        ORDER BY a.tgl_transaksi DESC, a.create_at DESC
         ");
     }
 
@@ -434,9 +440,9 @@ class M_Reqpic extends CI_Model
     {
         $where = '';
         if ($scope === 'request_acc') {
-            // Tampilkan request yang masih menunggu KADEP dan yang PO-nya
-            // telah memperoleh approval KADEP (REQUEST ACC).
-            $where = "WHERE TRIM(a.status) IN ('MENUNGGU ACC KADEP', 'REQUEST ACC')";
+            // Request baru tetap terlihat oleh Purchasing, tetapi tidak dapat
+            // diproses sebelum KADEP menyetujui.
+            $where = "WHERE TRIM(a.status) IN ('ON PROGRESS - BELUM ACC', 'ON PROGRESS', 'MENUNGGU ACC KADEP', 'REQUEST ACC')";
         }
 
         return $this->db->query("SELECT
@@ -450,18 +456,19 @@ class M_Reqpic extends CI_Model
         FROM tbpo_req_nk a
         LEFT JOIN tbpo_po_nk b ON b.kd_po_req = a.kd_po_nk
         $where
-        ORDER BY a.tgl_transaksi DESC;");
+        ORDER BY a.tgl_transaksi DESC, a.create_at DESC;");
     }
 
     public function getlistpicreqkadep($departemen, $kodeKadep = '')
     {
         $this->db->select('a.*');
         $this->db->from('tbpo_req_nk a');
-        $this->db->where('a.status', 'MENUNGGU ACC KADEP');
+        $this->db->where('a.status', 'ON PROGRESS - BELUM ACC');
         if (!is_super_admin()) {
             $this->db->where('a.departemen', $departemen);
         }
         $this->db->order_by('a.tgl_transaksi', 'DESC');
+        $this->db->order_by('a.create_at', 'DESC');
 
         return $this->db->get();
     }
@@ -477,6 +484,7 @@ class M_Reqpic extends CI_Model
             $this->db->where('p.departemen', $departemen);
         }
         $this->db->order_by('p.tgl_transaksi', 'DESC');
+        $this->db->order_by('p.create_at', 'DESC');
         return $this->db->get();
     }
 
@@ -490,7 +498,7 @@ class M_Reqpic extends CI_Model
                 'MENUNGGU PENYERAHAN BARANG',
                 'MENUNGGU PENYERAHAN BARAN'
             )
-            ORDER BY a.tgl_transaksi DESC;");
+            ORDER BY a.tgl_transaksi DESC, a.create_at DESC;");
     }
 
     public function getlistpickup()
@@ -498,7 +506,7 @@ class M_Reqpic extends CI_Model
         return $this->db->query("SELECT a.*
             FROM tbpo_req_nk a
             WHERE TRIM(a.status) IN ('MENUNGGU PENYERAHAN BARANG', 'MENUNGGU PENYERAHAN BARAN')
-            ORDER BY a.tgl_transaksi DESC;");
+            ORDER BY a.tgl_transaksi DESC, a.create_at DESC;");
     }
 
     /** Permohonan pengambilan yang menunggu keputusan KADEP. */
@@ -510,7 +518,32 @@ class M_Reqpic extends CI_Model
             $this->db->where('departemen', $departemen);
         }
         $this->db->order_by('tgl_transaksi', 'DESC');
+        $this->db->order_by('create_at', 'DESC');
         return $this->db->get();
+    }
+
+    /** Request asal sebuah detail item, dipakai untuk validasi aksi Purchasing. */
+    public function get_request_by_detail_id($detailId)
+    {
+        return $this->db
+            ->select('r.*')
+            ->from('tbpo_detail_req d')
+            ->join('tbpo_req_nk r', 'r.kd_po_nk = d.kd_po_nk')
+            ->where('d.id_det_po_nk', (int) $detailId)
+            ->get()
+            ->row();
+    }
+
+    /**
+     * Purchasing selalu terkunci hingga KADEP menyetujui request PIC.
+     */
+    public function can_purchasing_process($request)
+    {
+        if (!$request || trim((string) $request->status) !== 'ON PROGRESS - BELUM ACC') {
+            return (bool) $request;
+        }
+
+        return false;
     }
 
     /** Update hanya bila statusnya masih sesuai agar keputusan ganda tidak menimpa data. */
@@ -528,7 +561,7 @@ class M_Reqpic extends CI_Model
         return $this->db->query("SELECT a.*
             FROM tbpo_req_nk a
             WHERE a.status = 'DONE'
-            ORDER BY a.tgl_transaksi DESC;
+            ORDER BY a.tgl_transaksi DESC, a.create_at DESC;
             ");
     }
 

@@ -19,6 +19,7 @@
                                 <td>Nama Pengaju</td>
                                 <td>Departemen</td>
                                 <td>Tanggal Transaksi</td>
+                                <td>Jam</td>
                                 <td style="width: min-content;">Tujuan Pembelian</td>
                                 <td>Status</td>
                                 <td>Status PO</td>
@@ -31,6 +32,7 @@
                                     <td><?= $g->nm_user ?></td>
                                     <td><?= $g->departemen ?></td>
                                     <td><?= format_tgl_lahir($g->tgl_transaksi) ?></td>
+                                    <td><?= format_jam_24($g->create_at) ?></td>
                                     <td style="width: min-content;"><?= $g->tj_pembelian ?></td>
                                     <td>
                                         <a class="btn btn-block btn-warning btn-sm m-1"><b><?= $g->status ?></b></a>
