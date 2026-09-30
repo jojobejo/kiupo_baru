@@ -108,8 +108,11 @@ $db['default'] = array(
 	'db_debug' => (ENVIRONMENT !== 'production'),
 	'cache_on' => FALSE,
 	'cachedir' => '',
-	'char_set' => 'utf8',
-	'dbcollat' => 'utf8_general_ci',
+	// Production uses utf8mb4 columns.  Do not negotiate the legacy utf8
+	// (utf8mb3) connection charset, because it can make string parameters use
+	// a different character set/collation from the table columns.
+	'char_set' => 'utf8mb4',
+	'dbcollat' => 'utf8mb4_general_ci',
 	'swap_pre' => '',
 	'encrypt' => FALSE,
 	'compress' => FALSE,

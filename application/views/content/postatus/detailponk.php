@@ -53,10 +53,15 @@
                             $canUpdatePonkPengajuan = !in_array($s->status, $blockedPonkEditStatuses, true);
                             $kdPonkDetail = isset($kd) ? $kd : $s->kd_po_nk;
                             $hargaNyataStatusView = array('ACC DIREKTUR', 'PROSES PEMBELIAN', 'DONE');
-                            $hargaNyataStatusInput = array('ACC DIREKTUR', 'PROSES PEMBELIAN');
+                            $hargaNyataStatusInput = array('ACC DIREKTUR', 'PROSES PEMBELIAN', 'DONE');
                             $canShowHargaNyata = (int) $s->status_hrg_nyata === 1 && in_array($s->status, $hargaNyataStatusView, true);
                             $canEditHargaNyata = ($this->session->userdata('lv') == '2' || is_super_admin()) && (int) $s->status_hrg_nyata === 1 && in_array($s->status, $hargaNyataStatusInput, true);
                             $canSwitchHargaNyata = ($this->session->userdata('lv') == '2' || is_super_admin()) && in_array($s->status, $hargaNyataStatusInput, true);
+                            // Kolom tabel item: 7 kolom dasar, gambar, aksi, dan
+                            // tambahan 4 kolom saat harga nyata ditampilkan.
+                            $detailColumnCount = 9 + ($canShowHargaNyata ? 4 : 0);
+                            $summaryValueColumns = min(3, $detailColumnCount - 1);
+                            $summaryLabelColumns = $detailColumnCount - $summaryValueColumns;
                             ?>
                             <div class="col-2">
                                 <label for="naSupp" class="">NOMOR PO : </label>
@@ -611,7 +616,7 @@
                         <td>Qty Nyata</td>
                         <td>Harga Nyata</td>
                         <td>Total Harga Nyata</td>
-                        <td>Approval Harga</td>
+                        <td>Status Harga</td>
                     <?php endif; ?>
 
                     <!-- END HARGANYATA -->
@@ -624,7 +629,9 @@
                         <td>#</td>
                     <?php elseif ($this->session->userdata('lv') == '4' && $s->status == 'ON PROGRESS' || $s->status == 'PO REVISI') : ?>
                         <td>#</td>
-                    <?php elseif ($this->session->userdata('lv') == '4' || $this->session->userdata('lv') == '2' && $s->status == 'DONE') : ?>
+                    <?php elseif (($this->session->userdata('lv') == '2' || is_super_admin()) && $s->status == 'DONE') : ?>
+                        <td>#</td>
+                    <?php elseif ($this->session->userdata('lv') == '4') : ?>
                     <?php elseif ($this->session->userdata('lv') == '4' || $this->session->userdata('lv') == '2' && $s->status == 'REJECT') : ?>
                     <?php elseif ($this->session->userdata('lv') == '4' || $this->session->userdata('lv') == '2' && $s->status == 'SEDANG DIAJUKAN') : ?>
                     <?php endif; ?>
@@ -659,17 +666,13 @@
                             <td>Rp. <?= number_format($totalNyata) ?></td>
                             <td>
                                 <?php if ($statusApprovalHarga === 'PENDING_DIREKTUR') : ?>
-                                    <span class="badge badge-warning d-block mb-1">PENDING DIREKTUR</span>
-                                    <?php if ($this->session->userdata('lv') == '3' || is_super_admin()) : ?>
-                                        <a href="<?= base_url('approve_harganyata/' . $d->id_det_po_nk) ?>" class="btn btn-success btn-xs">Approve</a>
-                                        <a href="<?= base_url('reject_harganyata/' . $d->id_det_po_nk) ?>" class="btn btn-danger btn-xs">Reject</a>
-                                    <?php endif; ?>
+                                    <span class="badge badge-info d-block mb-1">TERCATAT PURCHASING</span>
                                 <?php elseif ($statusApprovalHarga === 'DISETUJUI_DIREKTUR') : ?>
                                     <span class="badge badge-success">DISETUJUI DIREKTUR</span>
                                 <?php elseif ($statusApprovalHarga === 'DITOLAK_DIREKTUR') : ?>
                                     <span class="badge badge-danger">DITOLAK DIREKTUR</span>
                                 <?php elseif ($statusApprovalHarga === 'DISETUJUI_OTOMATIS') : ?>
-                                    <span class="badge badge-info">OTOMATIS</span>
+                                    <span class="badge badge-info">TERCATAT PURCHASING</span>
                                 <?php else : ?>
                                     <span class="badge badge-secondary">BELUM INPUT</span>
                                 <?php endif; ?>
@@ -788,7 +791,15 @@
                                     <?php endif; ?>
                                 </div>
                             </td>
-                        <?php elseif ($this->session->userdata('lv') == '4' || $this->session->userdata('lv') == '2' && $s->status == 'DONE') : ?>
+                        <?php elseif (($this->session->userdata('lv') == '2' || is_super_admin()) && $s->status == 'DONE') : ?>
+                            <td>
+                                <?php if ($canEditHargaNyata) : ?>
+                                    <a class="btn btn-primary btn-sm mr-2" data-toggle="modal" data-target="#hrgnyata<?= $d->id_det_po_nk ?>">
+                                        <i class="fas fa-pencil-alt"></i> Edit Harga Purchasing
+                                    </a>
+                                <?php endif; ?>
+                            </td>
+                        <?php elseif ($this->session->userdata('lv') == '4') : ?>
                         <?php elseif ($this->session->userdata('lv') == '4' || $this->session->userdata('lv') == '2' && $s->status == 'REJECT') : ?>
                         <?php elseif ($this->session->userdata('lv') == '4' || $this->session->userdata('lv') == '2' && $s->status == 'SEDANG DIAJUKAN') : ?>
 
@@ -1830,53 +1841,53 @@
     <?php elseif ($this->session->userdata('lv') < '3' && $s->status == 'DONE') : ?>
         <?php foreach ($total as $t) : ?>
             <tr>
-                <td colspan="7" style="text-align: end; padding-right:3%; font-weight: bold;">Total Harga</td>
-                <td colspan="1" style="font-weight: bold;">Rp. <?= number_format($t->total_harga) ?></td>
+                <td colspan="<?= $summaryLabelColumns ?>" style="text-align: end; padding-right:3%; font-weight: bold;">Total Harga</td>
+                <td colspan="<?= $summaryValueColumns ?>" style="font-weight: bold;">Rp. <?= number_format($t->total_harga) ?></td>
             </tr>
         <?php endforeach; ?>
         <tr>
-            <td colspan="8" class="bg-black color-palette" style="text-align: center;">LIST DISKON</td>
+            <td colspan="<?= $detailColumnCount ?>" class="bg-black color-palette" style="text-align: center;">LIST DISKON</td>
         </tr>
         <?php foreach ($diskon as $d) : ?>
             <?php if ($diskon > 0) : ?>
                 <tr>
-                    <td colspan="7" style="text-align: end; padding-right:3%; font-weight: bold;"><?= $d->keterangan ?> : </td>
-                    <td colspan="1" style="font-weight: bold;">
+                    <td colspan="<?= $summaryLabelColumns ?>" style="text-align: end; padding-right:3%; font-weight: bold;"><?= $d->keterangan ?> : </td>
+                    <td colspan="<?= $summaryValueColumns ?>" style="font-weight: bold;">
                         Rp. <?= number_format($d->nominal, 2) ?>
                     </td>
                 </tr>
             <?php endif; ?>
         <?php endforeach; ?>
         <tr>
-            <td colspan="8" class="bg-black color-palette" style="text-align: center;">Note Pembelian</td>
+            <td colspan="<?= $detailColumnCount ?>" class="bg-black color-palette" style="text-align: center;">Note Pembelian</td>
         </tr>
         <?php foreach ($ntpembelian as $ntpm) : ?>
             <tr>
-                <td colspan="8" style="padding-right:3%; font-weight: bold;"><?= $ntpm->keterangan ?></td>
+                <td colspan="<?= $detailColumnCount ?>" style="padding-right:3%; font-weight: bold;"><?= $ntpm->keterangan ?></td>
             </tr>
         <?php endforeach; ?>
         <tr>
-            <td colspan="8" class="bg-black color-palette" style="text-align: center;">TOTAL HARGA</td>
+            <td colspan="<?= $detailColumnCount ?>" class="bg-black color-palette" style="text-align: center;">TOTAL HARGA</td>
         </tr>
         <?php foreach ($total as $t) :
                                     foreach ($totalDiskon as $d) :
                                         $stlhDiskon = $t->total_harga - $d->total_diskon;
                                         $tax = $s->tax / 100;
                                         $hargaPajak = $stlhDiskon * $tax;
-                                        $hargaAll = $stlhDiskon + $hargaPajak; ?>
+                $hargaAll = $stlhDiskon + $hargaPajak; ?>
                 <tr>
-                    <td colspan="7" style="text-align: end; padding-right:3%; font-weight: bold;">Total Harga Setelah Diskon :</td>
-                    <td colspan="1" style="font-weight: bold;"> Rp.<?= number_format($stlhDiskon, 2) ?> </td>
+                    <td colspan="<?= $summaryLabelColumns ?>" style="text-align: end; padding-right:3%; font-weight: bold;">Total Harga Setelah Diskon :</td>
+                    <td colspan="<?= $summaryValueColumns ?>" style="font-weight: bold;"> Rp.<?= number_format($stlhDiskon, 2) ?> </td>
                 </tr>
 
                 <tr>
-                    <td colspan="7" style="text-align: end; padding-right:3%; font-weight: bold;">Tax : <?= $s->tax ?>(%)</td>
-                    <td colspan="1" style="font-weight: bold;"> Rp. <?= number_format($hargaPajak, 2) ?> </td>
+                    <td colspan="<?= $summaryLabelColumns ?>" style="text-align: end; padding-right:3%; font-weight: bold;">Tax : <?= $s->tax ?>(%)</td>
+                    <td colspan="<?= $summaryValueColumns ?>" style="font-weight: bold;"> Rp. <?= number_format($hargaPajak, 2) ?> </td>
                 </tr>
 
                 <tr>
-                    <td colspan="7" style="text-align: end; padding-right:3%; font-weight: bold;">Grand Total Harga</td>
-                    <td colspan="1" style="font-weight: bold;">Rp. <?= number_format($hargaAll, 2) ?></td>
+                    <td colspan="<?= $summaryLabelColumns ?>" style="text-align: end; padding-right:3%; font-weight: bold;">Grand Total Harga</td>
+                    <td colspan="<?= $summaryValueColumns ?>" style="font-weight: bold;">Rp. <?= number_format($hargaAll, 2) ?></td>
                 </tr>
             <?php endforeach; ?>
         <?php endforeach; ?>
@@ -1885,10 +1896,11 @@
     <?php endif; ?>
 
 
-    <div class="row mr-2">
-        <div class="col-md-8">
+    <div class="row mx-0">
+        <div class="col-12 px-0">
             <div class="noteDirektur">
-                <table class="table table-bordered table-stripeds">
+                <div class="table-responsive">
+                <table class="table table-bordered table-stripeds mb-0">
                     <thead style="background-color: #212529; color:white;">
                         <tr>
                             <td class="tdnote">ISI NOTE</td>
@@ -1897,15 +1909,28 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($log as $l) : ?>
+                        <?php if (!empty($log)) : ?>
+                            <?php foreach ($log as $l) : ?>
+                                <tr>
+                                    <td><?= $l->isi_note ?></td>
+                                    <td><?= $l->nama_user ?></td>
+                                    <td><?= $l->log_create ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else : ?>
                             <tr>
-                                <td><?= $l->isi_note ?></td>
-                                <td><?= $l->nama_user ?></td>
-                                <td><?= $l->log_create ?></td>
+                                <td colspan="3" class="text-center text-muted">Belum ada note pembelian.</td>
                             </tr>
-                        <?php endforeach; ?>
+                        <?php endif; ?>
                     </tbody>
                 </table>
+                </div>
+                <?php if (!empty($notePagination)) : ?>
+                    <div class="mt-3">
+                        <p class="text-center text-muted mb-2">Total <?= (int) $noteTotal ?> note &mdash; 10 data per halaman</p>
+                        <?= $notePagination ?>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>

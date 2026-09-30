@@ -426,6 +426,25 @@ class M_PoStatus extends CI_Model
         return $this->db->get()->result();
     }
 
+    public function count_noted($kdpo)
+    {
+        return (int) $this->db
+            ->where('kd_po', $kdpo)
+            ->count_all_results('tbpo_note_direktur');
+    }
+
+    public function get_noted_page($kdpo, $limit, $offset)
+    {
+        return $this->db
+            ->select('*')
+            ->from('tbpo_note_direktur')
+            ->where('kd_po', $kdpo)
+            ->order_by('log_create', 'DESC')
+            ->limit((int) $limit, (int) $offset)
+            ->get()
+            ->result();
+    }
+
     public function getTax()
     {
         return $this->db->get('tbpo_set_tax')->result();
@@ -703,6 +722,11 @@ class M_PoStatus extends CI_Model
             $this->db->select('COALESCE(r.alasan_realisasi, "") AS alasan_realisasi', false);
             $this->db->select('COALESCE(r.selisih_harga, 0) AS selisih_harga_nyata', false);
             $this->db->select('COALESCE(r.updated_at, r.created_at) AS realisasi_updated_at', false);
+            if ($this->db->field_exists('harga_dipakai_lifo', 'tbpo_realisasi_detail_po_nk')) {
+                $this->db->select("COALESCE(NULLIF(r.harga_dipakai_lifo, ''), 'REALISASI') AS harga_dipakai_lifo", false);
+            } else {
+                $this->db->select("'REALISASI' AS harga_dipakai_lifo", false);
+            }
         } else {
             $this->db->select('a.qty AS qty_nyata', false);
             $this->db->select('a.hrg_nyata AS hrg_nyata', false);
@@ -711,10 +735,23 @@ class M_PoStatus extends CI_Model
             $this->db->select('"" AS alasan_realisasi', false);
             $this->db->select('(a.hrg_nyata - a.hrg_satuan) AS selisih_harga_nyata', false);
             $this->db->select('NULL AS realisasi_updated_at', false);
+            $this->db->select("'REALISASI' AS harga_dipakai_lifo", false);
         }
         $this->db->from('tbpo_detail_po_nk a');
-        $this->db->join('tbpo_user b', 'b.kode_user = a.kd_user', 'left');
-        $this->db->join('tbpo_barang_nk c', 'c.kd_barang = a.kd_barang', 'left');
+        // Production contains legacy and newly imported tables with different
+        // utf8mb4 collations. Use one collation for both string joins.
+        $this->db->join(
+            'tbpo_user b',
+            'b.kode_user COLLATE utf8mb4_general_ci = a.kd_user COLLATE utf8mb4_general_ci',
+            'left',
+            false
+        );
+        $this->db->join(
+            'tbpo_barang_nk c',
+            'c.kd_barang COLLATE utf8mb4_general_ci = a.kd_barang COLLATE utf8mb4_general_ci',
+            'left',
+            false
+        );
         if ($this->db->table_exists('tbpo_realisasi_detail_po_nk')) {
             $this->db->join('tbpo_realisasi_detail_po_nk r', 'r.id_det_po_nk = a.id_det_po_nk', 'left');
         }
@@ -881,10 +918,24 @@ class M_PoStatus extends CI_Model
 
     public function get_last_harga_barang_nk($kodeBarang, $kodeBarangSys = '')
     {
-        $this->db->select('a.hrg_satuan, a.hrg_nyata, a.total_harga, a.total_nyata, a.kd_po_nk, p.tgl_transaksi');
+        $hasRealisasi = $this->db->table_exists('tbpo_realisasi_detail_po_nk');
+        if ($hasRealisasi) {
+            $hargaNyata = 'COALESCE(NULLIF(r.harga_nyata, 0), NULLIF(a.hrg_nyata, 0))';
+            $this->db->select("CASE WHEN {$hargaNyata} IS NOT NULL THEN {$hargaNyata} ELSE a.hrg_satuan END AS hrg_satuan", false);
+            $this->db->select("{$hargaNyata} AS hrg_nyata", false);
+            $this->db->join('tbpo_realisasi_detail_po_nk r', 'r.id_det_po_nk = a.id_det_po_nk', 'left');
+        } else {
+            $this->db->select('CASE WHEN a.hrg_nyata > 0 THEN a.hrg_nyata ELSE a.hrg_satuan END AS hrg_satuan', false);
+            $this->db->select('a.hrg_nyata', false);
+        }
+        $this->db->select('a.hrg_satuan AS harga_pengajuan_purchasing, a.total_harga, a.total_nyata, a.kd_po_nk, p.tgl_transaksi');
         $this->db->from('tbpo_detail_po_nk a');
         $this->db->join('tbpo_po_nk p', 'p.kd_po_nk = a.kd_po_nk', 'left');
-        $this->db->where('a.hrg_satuan >', 0);
+        if ($hasRealisasi) {
+            $this->db->where('(COALESCE(NULLIF(r.harga_nyata, 0), NULLIF(a.hrg_nyata, 0)) IS NOT NULL OR a.hrg_satuan > 0)', null, false);
+        } else {
+            $this->db->where('(a.hrg_nyata > 0 OR a.hrg_satuan > 0)', null, false);
+        }
 
         if ($kodeBarangSys !== '') {
             $this->db->where('a.kd_bsys', $kodeBarangSys);
@@ -1259,6 +1310,12 @@ class M_PoStatus extends CI_Model
                 'updated_by' => isset($logData['kd_user']) ? $logData['kd_user'] : '',
                 'updated_at' => date('Y-m-d H:i:s')
             );
+            if ($this->db->field_exists('harga_dipakai_lifo', 'tbpo_realisasi_detail_po_nk')) {
+                $row['harga_dipakai_lifo'] = isset($data['harga_dipakai_lifo']) ? $data['harga_dipakai_lifo'] : 'REALISASI';
+            }
+            if ($this->db->field_exists('catatan_keputusan_harga', 'tbpo_realisasi_detail_po_nk')) {
+                $row['catatan_keputusan_harga'] = isset($data['catatan_keputusan_harga']) ? $data['catatan_keputusan_harga'] : '';
+            }
 
             $exists = $this->db
                 ->where('id_det_po_nk', $id)

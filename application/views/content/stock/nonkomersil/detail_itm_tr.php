@@ -1,4 +1,5 @@
 <?php foreach ($item as $i) : ?>
+    <?php $formatQty = function ($qty) { return number_format((float) $qty, 0, ',', ''); }; ?>
     <?php $this->load->view('content/stock/nonkomersil/modal/modalstock.php') ?>
     <div class="content-wrapper">
         <div class="content-header">
@@ -38,23 +39,59 @@
 
                         <!-- Tempat menampilkan hasil -->
                         <div id="result"></div>
-                        <?php if ($lifo_summary !== null && $can_manage_lifo_price) : ?>
+                        <?php if ($lifo_summary !== null) : ?>
                             <div class="row mb-3">
-                                <div class="col-md-3"><div class="small-box bg-info"><div class="inner"><h4><?= (float) $lifo_summary->qty_batch ?></h4><p>Qty Batch LIFO</p></div></div></div>
-                                <div class="col-md-3"><div class="small-box bg-success"><div class="inner"><h4><?= (int) $lifo_summary->batch_aktif ?></h4><p>Batch Aktif</p></div></div></div>
-                                <div class="col-md-3"><div class="small-box bg-primary"><div class="inner"><h4>Rp <?= number_format($lifo_summary->nilai_lifo, 0, ',', '.') ?></h4><p>Nilai Stok LIFO</p></div></div></div>
-                                <div class="col-md-3"><div class="small-box <?= (float) $lifo_summary->qty_perlu_harga > 0 ? 'bg-danger' : 'bg-secondary' ?>"><div class="inner"><h4><?= (float) $lifo_summary->qty_perlu_harga ?></h4><p>Qty Perlu Harga</p></div></div></div>
+                                <div class="col-lg-3 col-md-6"><div class="small-box bg-info"><div class="inner"><h4><?= $formatQty($lifo_summary->qty_batch) ?></h4><p>Qty Batch LIFO</p></div></div></div>
+                                <div class="col-lg-3 col-md-6"><div class="small-box bg-success"><div class="inner"><h4><?= (int) $lifo_summary->batch_aktif ?></h4><p>Batch Aktif</p></div></div></div>
+                                <div class="col-lg-3 col-md-6"><div class="small-box <?= $lifo_last_price !== null ? 'bg-info' : 'bg-secondary' ?>"><div class="inner"><h4><?= $lifo_last_price !== null ? 'Rp ' . number_format($lifo_last_price->harga_satuan, 0, ',', '.') : '-' ?></h4><p>Harga Satuan Terakhir</p></div></div></div>
+                                <div class="col-lg-3 col-md-6"><div class="small-box <?= (float) $lifo_summary->qty_perlu_harga > 0 ? 'bg-danger' : 'bg-secondary' ?>"><div class="inner"><h4><?= $formatQty($lifo_summary->qty_perlu_harga) ?></h4><p>Qty Perlu Harga</p></div></div></div>
                             </div>
-                            <h4 class="mt-3">Lapisan Stok LIFO Tersisa</h4>
-                            <table class="table table-bordered table-sm mb-4">
-                                <thead style="background-color: #212529; color:white;"><tr><td>Urutan</td><td>Tanggal Masuk</td><td>Referensi</td><td>Sumber</td><td>Qty Awal</td><td>Qty Sisa</td><td>Harga / Unit</td><td>Nilai Sisa</td><td>Dasar Harga</td><?php if ($can_manage_lifo_price) : ?><td>#</td><?php endif; ?></tr></thead>
+                            <div class="card card-outline card-info card-tabs mb-4">
+                                <div class="card-header p-0 pt-1 border-bottom-0">
+                                    <ul class="nav nav-tabs" role="tablist">
+                                        <li class="nav-item"><a class="nav-link <?= !empty($history_tab_active) ? '' : 'active' ?>" data-toggle="tab" href="#tab-lapisan-lifo" role="tab">Lapisan Stok LIFO Tersisa</a></li>
+                                        <li class="nav-item"><a class="nav-link <?= !empty($history_tab_active) ? 'active' : '' ?>" data-toggle="tab" href="#tab-histori-batch-lifo" role="tab">Histori Batch LIFO Semua Transaksi</a></li>
+                                    </ul>
+                                </div>
+                                <div class="card-body p-0"><div class="tab-content">
+                                    <div class="tab-pane <?= !empty($history_tab_active) ? '' : 'active' ?> p-3" id="tab-lapisan-lifo" role="tabpanel">
+                            <table class="table table-bordered table-sm mb-0">
+                                <thead style="background-color: #212529; color:white;"><tr><td>Urutan</td><td>Tanggal Masuk</td><td>Referensi</td><td>Sumber</td><td>Qty Awal</td><td>Qty Sisa</td><td>Harga / Unit</td><td>Harga Purchasing</td><td>Dasar Harga</td><td>Status Harga</td><?php if ($can_manage_lifo_price) : ?><td>#</td><?php endif; ?></tr></thead>
                                 <tbody><?php foreach ($lifo_batches as $index => $batch) : ?><tr>
-                                    <td><?= $index + 1 ?></td><td><?= $batch->tgl_efektif ?></td><td><?= $batch->referensi_sumber ?></td><td><?= $batch->jenis_sumber ?></td><td><?= $batch->qty_awal ?></td><td><?= $batch->qty_sisa ?></td>
+                                    <td><?= $index + 1 ?></td><td><?= $batch->tgl_efektif ?></td><td><?= $batch->referensi_sumber ?></td><td><?= $batch->jenis_sumber ?></td><td><?= $formatQty($batch->qty_awal) ?></td><td><?= $formatQty($batch->qty_sisa) ?></td>
                                     <td><?= $batch->status_harga === 'VALID' ? 'Rp ' . number_format($batch->harga_satuan, 0, ',', '.') : '<span class="badge badge-danger">Perlu harga</span>' ?></td>
-                                    <td><?= $batch->status_harga === 'VALID' ? 'Rp ' . number_format($batch->qty_sisa * $batch->harga_satuan, 0, ',', '.') : '-' ?></td><td><?= $batch->dasar_harga ?></td>
+                                    <td><?= $batch->harga_purchasing !== null ? 'Rp ' . number_format($batch->harga_purchasing, 0, ',', '.') : '-' ?></td>
+                                    <td><?= htmlspecialchars($batch->label_dasar_harga, ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= $batch->status_harga === 'VALID' ? '<span class="badge badge-success">Valid</span>' : '<span class="badge badge-danger">Perlu Harga</span>' ?></td>
                                     <?php if ($can_manage_lifo_price) : ?><td><?php if ($batch->status_harga === 'PERLU_HARGA') : ?><form method="post" action="<?= base_url('stocknonkomersil/save_lifo_price') ?>"><input type="hidden" name="id_batch" value="<?= $batch->id_batch ?>"><input type="hidden" name="kd_barang" value="<?= $i->kode_sistem ?>"><input class="form-control form-control-sm mb-1" name="harga_satuan" type="number" min="1" placeholder="Harga"><input class="form-control form-control-sm mb-1" name="alasan" required placeholder="Alasan"><button class="btn btn-sm btn-warning">Simpan</button></form><?php endif; ?></td><?php endif; ?>
                                 </tr><?php endforeach; ?></tbody>
                             </table>
+                                    </div>
+                                    <div class="tab-pane <?= !empty($history_tab_active) ? 'active' : '' ?>" id="tab-histori-batch-lifo" role="tabpanel">
+                                        <div class="table-responsive"><table class="table table-bordered table-sm mb-0">
+                                            <thead style="background-color: #212529; color:white;"><tr><td>Tanggal Masuk</td><td>Referensi</td><td>Sumber</td><td>Qty Awal</td><td>Qty Sisa</td><td>Status Batch</td><td>Harga / Unit</td><td>Harga Purchasing</td><td>Dasar Harga</td><td>Status Harga</td></tr></thead>
+                                            <tbody><?php if (empty($lifo_batch_history)) : ?><tr><td colspan="10" class="text-center text-muted">Belum ada histori batch LIFO.</td></tr><?php endif; ?><?php foreach ($lifo_batch_history as $batch) : ?><tr>
+                                                <td><?= htmlspecialchars($batch->tgl_efektif, ENT_QUOTES, 'UTF-8') ?></td><td><?= htmlspecialchars($batch->referensi_sumber, ENT_QUOTES, 'UTF-8') ?></td><td><?= htmlspecialchars($batch->jenis_sumber, ENT_QUOTES, 'UTF-8') ?></td><td><?= $formatQty($batch->qty_awal) ?></td><td><?= $formatQty($batch->qty_sisa) ?></td><td><?= htmlspecialchars($batch->status_batch, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= $batch->status_harga === 'VALID' ? 'Rp ' . number_format($batch->harga_satuan, 0, ',', '.') : '<span class="badge badge-danger">Perlu harga</span>' ?></td><td><?= $batch->harga_purchasing !== null ? 'Rp ' . number_format($batch->harga_purchasing, 0, ',', '.') : '-' ?></td><td><?= htmlspecialchars($batch->label_dasar_harga, ENT_QUOTES, 'UTF-8') ?></td><td><?= $batch->status_harga === 'VALID' ? '<span class="badge badge-success">Valid</span>' : '<span class="badge badge-danger">Perlu Harga</span>' ?></td>
+                                            </tr><?php endforeach; ?></tbody>
+                                        </table></div>
+                                        <?php if ($history_last_page > 1) : ?>
+                                            <nav class="pt-3" aria-label="Navigasi histori batch LIFO"><ul class="pagination justify-content-center mb-2">
+                                                <?php for ($page = 1; $page <= $history_last_page; $page++) : ?>
+                                                    <li class="page-item <?= $page === $history_page ? 'active' : '' ?>"><a class="page-link" href="<?= base_url('detailtransaksi/' . rawurlencode($i->kode_sistem)) . '?history_page=' . $page ?>"><?= $page ?></a></li>
+                                                <?php endfor; ?>
+                                            </ul></nav>
+                                        <?php endif; ?>
+                                        <p class="text-center text-muted small mb-3">Total <?= (int) $history_total ?> batch &mdash; 5 data per halaman</p>
+                                    </div>
+                                </div></div>
+                            </div>
+                        <?php elseif ($lifo_last_price !== null) : ?>
+                            <div class="alert alert-info mb-3">
+                                <b>Harga LIFO terakhir:</b> Rp <?= number_format($lifo_last_price->harga_satuan, 0, ',', '.') ?>
+                                &mdash; dasar harga <?= htmlspecialchars($lifo_last_price->dasar_harga, ENT_QUOTES, 'UTF-8') ?>,
+                                referensi <?= htmlspecialchars($lifo_last_price->referensi_sumber, ENT_QUOTES, 'UTF-8') ?>.
+                            </div>
                         <?php endif; ?>
                         <table class="table table-bordered mb-5">
                             <thead style="background-color: #212529; color:white;">
@@ -65,7 +102,10 @@
                                     <td style="text-align: center;">Keterangan</td>
                                     <td style="text-align: center;">Departemen</td>
                                     <td style="text-align: center;">PIC</td>
+                                    <td style="text-align: center;">Referensi</td>
                                     <td style="text-align: center;">Qty</td>
+                                    <td style="text-align: center;">Harga Satuan</td>
+                                    <td style="text-align: center;">Batch LIFO</td>
                                     <?php if ($this->session->userdata('kode') == 'KEU09') : ?>
                                         <td style="text-align: center;">#</td>
                                     <?php elseif ($this->session->userdata('kode') == 'KEU02') : ?>
@@ -112,7 +152,25 @@
                                             <td style="text-align: center;"><?= $s->dep ?></td>
                                             <td style="text-align: center;"><?= $s->nmreq ?></td>
                                         <?php endif; ?>
-                                        <td style="text-align: center;"><?= $qs . $s->qty . " " . "(" . $s->nm_satuan . ")" ?></td>
+                                        <td style="text-align: center;">
+                                            <?php $referenceCode = trim((string) $s->kode_referensi); ?>
+                                            <?php if ($s->tipe_referensi === 'PEMBELIAN') : ?>
+                                                <a href="<?= base_url('detailponk/' . rawurlencode($referenceCode)) ?>" class="btn btn-outline-primary btn-sm" title="Lihat detail PO Pembelian">
+                                                    <i class="fas fa-shopping-cart"></i> PO
+                                                </a>
+                                            <?php elseif ($s->tipe_referensi === 'PENGAMBILAN') : ?>
+                                                <a href="<?= base_url('reqpic/detreqbarangpic/' . rawurlencode($referenceCode)) ?>" class="btn btn-outline-success btn-sm" title="Lihat detail pengambilan barang">
+                                                    <i class="fas fa-dolly"></i> Pengambilan
+                                                </a>
+                                            <?php elseif ($referenceCode !== '') : ?>
+                                                <span class="text-muted small" title="Referensi historis tidak ditemukan"><?= htmlspecialchars($referenceCode, ENT_QUOTES, 'UTF-8') ?></span>
+                                            <?php else : ?>
+                                                <span class="text-muted">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td style="text-align: center;"><?= $qs . $formatQty($s->qty) . " " . "(" . $s->nm_satuan . ")" ?></td>
+                                        <td style="text-align: center;"><?= $s->nominal_lifo !== null ? 'Rp ' . number_format($s->nominal_lifo, 0, ',', '.') : '-' ?></td>
+                                        <td style="text-align: center;" class="small"><?= htmlspecialchars($s->batch_lifo ?: '-', ENT_QUOTES, 'UTF-8') ?></td>
                                         <?php if ($this->session->userdata('kode') == 'KEU09') : ?>
                                             <td style="text-align: center;">
                                                 <a href="<?= base_url('tr_trash/1/') . $s->id ?>" class="btn btn-danger btn-sm"><i class="fa fa-trash-alt"></i></a>
@@ -126,6 +184,12 @@
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
+                        <?php if (!empty($pagination)) : ?>
+                            <div class="mt-3">
+                                <p class="text-center text-muted mb-2">Total <?= (int) $transaction_total ?> transaksi &mdash; 10 data per halaman</p>
+                                <?= $pagination ?>
+                            </div>
+                        <?php endif; ?>
 
                         <table class="table table-bordered mt-2">
                             <thead style="background-color: #212529; color:white;">

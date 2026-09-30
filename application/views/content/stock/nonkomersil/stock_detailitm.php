@@ -108,6 +108,12 @@
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
+                        <?php if (!empty($pagination)) : ?>
+                            <div class="mt-3">
+                                <p class="text-center text-muted mb-2">Total <?= (int) $transaction_total ?> transaksi &mdash; 10 data per halaman</p>
+                                <?= $pagination ?>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div><!-- /.container-fluid -->

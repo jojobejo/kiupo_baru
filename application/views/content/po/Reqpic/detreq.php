@@ -131,6 +131,20 @@
                                         <?php endforeach; ?>
                                     </tbody>
                                 </table>
+                                <?php if (!empty($lifoPickup)) : ?>
+                                    <div class="alert alert-info small"><i class="fas fa-info-circle"></i> Harga berikut adalah snapshot alokasi batch LIFO pada tanggal transaksi pengambilan, bukan harga master yang berubah setelahnya.</div>
+                                    <table class="table table-bordered table-striped mb-2">
+                                        <thead style="background-color: #212529; color:white;"><tr><td>Barang</td><td>Tanggal Pengambilan</td><td>Qty</td><td>Harga Batch LIFO</td><td>Nilai Pengambilan</td><td>Keterangan Batch</td></tr></thead>
+                                        <tbody><?php foreach ($lifoPickup as $lifo) : ?><tr>
+                                            <td><?= htmlspecialchars($lifo->nama_barang, ENT_QUOTES, 'UTF-8') ?></td>
+                                            <td><?= htmlspecialchars($lifo->tgl_transaksi, ENT_QUOTES, 'UTF-8') ?></td>
+                                            <td class="text-center"><?= number_format($lifo->qty_alokasi ?: $lifo->tr_qty, 2, ',', '.') ?></td>
+                                            <td><?= $lifo->harga_satuan !== null ? 'Rp ' . number_format($lifo->harga_satuan, 0, ',', '.') : '-' ?></td>
+                                            <td><?= $lifo->nilai_total !== null ? 'Rp ' . number_format($lifo->nilai_total, 0, ',', '.') : '-' ?></td>
+                                            <td class="small"><?= htmlspecialchars($lifo->keterangan_batch ?: 'Batch LIFO belum tersedia / harga belum tervalidasi.', ENT_QUOTES, 'UTF-8') ?></td>
+                                        </tr><?php endforeach; ?></tbody>
+                                    </table>
+                                <?php endif; ?>
                             <?php endif; ?>
                             <?php if (in_array($s->status, array('ON PROGRESS', 'ON PROGRESS - BELUM ACC', 'MENUNGGU ACC KADEP'), true)) : ?>
                                 <table class="table table-bordered table-striped mt-4 mb-2 ">
@@ -165,17 +179,23 @@
                                             <td style="width:20%;">Keterangan</td>
                                             <td style="width:10%;text-align: center;">QTY</td>
                                             <td style="width:10%;text-align: center;">Satuan</td>
+                                            <td style="text-align: center;">Harga Batch LIFO</td>
+                                            <td style="text-align: center;">Keterangan Batch</td>
                                             <td style="width:10%;text-align: center;">#</td>
                                         </tr>
                                     </thead>
                                     <tbody>
+                                        <?php $lifoByBarang = array(); foreach ((isset($lifoPickup) ? $lifoPickup : array()) as $lifoRow) { $lifoByBarang[$lifoRow->kd_barangsys] = $lifoRow; $lifoByBarang[$lifoRow->kd_barang] = $lifoRow; } ?>
                                         <?php foreach ($getitmlistpicreq as $d) : ?>
+                                            <?php $lifo = isset($lifoByBarang[$d->kd_bsys]) ? $lifoByBarang[$d->kd_bsys] : (isset($lifoByBarang[$d->kd_barang]) ? $lifoByBarang[$d->kd_barang] : null); ?>
                                             <tr>
                                                 <td><?= $d->nmbarang ?></td>
                                                 <td><?= $d->deskripsi ?></td>
                                                 <td><?= $d->ket ?></td>
                                                 <td style="text-align: center;"><?= $d->qty ?></td>
                                                 <td style="text-align: center;"><?= $d->nmsatuan ?></td>
+                                                <td style="text-align: center;"><?= $lifo && $lifo->harga_satuan !== null ? 'Rp ' . number_format($lifo->harga_satuan, 0, ',', '.') : '-' ?></td>
+                                                <td class="small"><?= $lifo ? htmlspecialchars($lifo->keterangan_batch ?: 'Batch belum tervalidasi.', ENT_QUOTES, 'UTF-8') : 'Belum ada alokasi batch LIFO.' ?></td>
                                                 <td><a href="#" class="btn btn-block btn-success btn-md"><i class="fas fa-check-circle"></i></a></td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -388,16 +408,22 @@
                                             <td style="width:20%;">Keterangan</td>
                                             <td style="width:10%;text-align: center;">QTY</td>
                                             <td style="width:10%;text-align: center;">Satuan</td>
+                                            <td style="text-align: center;">Harga Batch LIFO</td>
+                                            <td style="text-align: center;">Keterangan Batch</td>
                                         </tr>
                                     </thead>
                                     <tbody>
+                                        <?php $lifoByBarangDone = array(); foreach ((isset($lifoPickup) ? $lifoPickup : array()) as $lifoRow) { $lifoByBarangDone[$lifoRow->kd_barangsys] = $lifoRow; $lifoByBarangDone[$lifoRow->kd_barang] = $lifoRow; } ?>
                                         <?php foreach ($getitmlistpicreq as $d) : ?>
+                                            <?php $lifo = isset($lifoByBarangDone[$d->kd_bsys]) ? $lifoByBarangDone[$d->kd_bsys] : (isset($lifoByBarangDone[$d->kd_barang]) ? $lifoByBarangDone[$d->kd_barang] : null); ?>
                                             <tr>
                                                 <td><?= $d->nmbarang ?></td>
                                                 <td><?= $d->deskripsi ?></td>
                                                 <td><?= $d->ket ?></td>
                                                 <td style="text-align: center;"><?= $d->qty ?></td>
                                                 <td style="text-align: center;"><?= $d->nmsatuan ?></td>
+                                                <td style="text-align: center;"><?= $lifo && $lifo->harga_satuan !== null ? 'Rp ' . number_format($lifo->harga_satuan, 0, ',', '.') : '-' ?></td>
+                                                <td class="small"><?= $lifo ? htmlspecialchars($lifo->keterangan_batch ?: 'Batch belum tervalidasi.', ENT_QUOTES, 'UTF-8') : 'Belum ada alokasi batch LIFO.' ?></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>
@@ -522,7 +548,7 @@
                     <div class="card">
                         <div class="card-body">
                             <?php if ($purchasingLocked) : ?>
-                                <div class="alert alert-warning"><i class="fas fa-user-clock"></i> Menunggu ACC KADEP. Aksi Purchasing dibuka setelah KADEP menyetujui request.</div>
+                                <div class="alert alert-warning"><i class="fas fa-user-clock"></i> Menunggu ACC KADEP. Aksi Purchasing dibuka setelah 5 menit sejak request diajukan atau setelah KADEP menyetujuinya.</div>
                             <?php endif; ?>
                             <div class="row mb-2">
                                 <div class="col">
@@ -1064,16 +1090,22 @@
                                             <td style="width:30%">Keterangan</td>
                                             <td style="width:10%">QTY</td>
                                             <td style="width:10%">Satuan</td>
+                                            <td>Harga Satuan LIFO</td>
+                                            <td>Keterangan Batch</td>
                                         </tr>
                                     </thead>
                                     <tbody>
+                                        <?php $lifoByBarangPurchasing = array(); foreach ((isset($lifoPickup) ? $lifoPickup : array()) as $lifoRow) { $lifoByBarangPurchasing[$lifoRow->kd_barangsys] = $lifoRow; $lifoByBarangPurchasing[$lifoRow->kd_barang] = $lifoRow; } ?>
                                         <?php foreach ($gettr as $d) : ?>
+                                            <?php $lifo = isset($lifoByBarangPurchasing[$d->kd_bsys]) ? $lifoByBarangPurchasing[$d->kd_bsys] : (isset($lifoByBarangPurchasing[$d->kd_barang]) ? $lifoByBarangPurchasing[$d->kd_barang] : null); ?>
                                             <tr>
                                                 <td><?= $d->nama_barang ?></td>
                                                 <td><?= $d->descnk ?></td>
                                                 <td><?= $d->keterangan ?></td>
                                                 <td style="text-align: center;"><?= $d->qty ?></td>
                                                 <td style="text-align: center;"><?= $d->nm_satuan ?></td>
+                                                <td style="text-align: center;"><?= $lifo && $lifo->harga_satuan !== null ? 'Rp ' . number_format($lifo->harga_satuan, 0, ',', '.') : '-' ?></td>
+                                                <td class="small"><?= $lifo ? htmlspecialchars($lifo->keterangan_batch ?: 'Batch belum tervalidasi.', ENT_QUOTES, 'UTF-8') : 'Belum ada alokasi batch LIFO.' ?></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>

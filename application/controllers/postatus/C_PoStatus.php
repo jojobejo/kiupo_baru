@@ -15,6 +15,7 @@ class C_PoStatus extends CI_Controller
         parent::__construct();
         $this->load->model('PO/M_Postatus');
         $this->load->model('PO/M_Purchase');
+        $this->load->model('stock/M_StockLifo');
         $this->load->helper('download');
         $this->load->library('form_validation');
     }
@@ -47,7 +48,10 @@ class C_PoStatus extends CI_Controller
 
     private function canInputHargaNyata($status)
     {
-        return in_array($status, array('ACC DIREKTUR', 'PROSES PEMBELIAN'), true);
+        // Harga realisasi tetap dapat dilengkapi/dikoreksi oleh Purchasing
+        // setelah PO selesai. Nilai pengajuan tidak ditimpa; perubahan masuk
+        // ke tabel realisasi dan log audit.
+        return in_array($status, array('ACC DIREKTUR', 'PROSES PEMBELIAN', 'DONE'), true);
     }
 
     private function validateHargaNyataBeforePembelian($kdpo, $statusRow)
@@ -1890,11 +1894,46 @@ class C_PoStatus extends CI_Controller
 
     public function detailponk($kd)
     {
+        $notePerPage = 10;
+        $noteOffset = max(0, (int) $this->input->get('note_page'));
+        $noteTotal = $this->M_Postatus->count_noted($kd);
+
+        if ($noteOffset >= $noteTotal && $noteTotal > 0) {
+            $noteOffset = (int) (floor(($noteTotal - 1) / $notePerPage) * $notePerPage);
+        }
+
+        $this->load->library('pagination');
+        $this->pagination->initialize(array(
+            'base_url' => base_url('detailponk/' . rawurlencode($kd)),
+            'total_rows' => $noteTotal,
+            'per_page' => $notePerPage,
+            'page_query_string' => true,
+            'query_string_segment' => 'note_page',
+            'reuse_query_string' => true,
+            'full_tag_open' => '<nav aria-label="Navigasi note pembelian"><ul class="pagination justify-content-center mb-0">',
+            'full_tag_close' => '</ul></nav>',
+            'attributes' => array('class' => 'page-link'),
+            'num_tag_open' => '<li class="page-item">',
+            'num_tag_close' => '</li>',
+            'cur_tag_open' => '<li class="page-item active" aria-current="page"><span class="page-link">',
+            'cur_tag_close' => '</span></li>',
+            'next_tag_open' => '<li class="page-item">',
+            'next_tag_close' => '</li>',
+            'prev_tag_open' => '<li class="page-item">',
+            'prev_tag_close' => '</li>',
+            'first_tag_open' => '<li class="page-item">',
+            'first_tag_close' => '</li>',
+            'last_tag_open' => '<li class="page-item">',
+            'last_tag_close' => '</li>',
+        ));
+
         $data['title'] = 'PO Status';
         $data['kd'] = $kd;
         $data['detail'] = $this->M_Postatus->getDetailnk($kd);
         $data['status'] = $this->M_Postatus->getdataStatusnk($kd);
-        $data['log']    = $this->M_Postatus->getNoted($kd);
+        $data['log']    = $this->M_Postatus->get_noted_page($kd, $notePerPage, $noteOffset);
+        $data['noteTotal'] = $noteTotal;
+        $data['notePagination'] = $this->pagination->create_links();
         $data['total']  = $this->M_Postatus->sumTransaksiPenjualannk($kd);
         $data['totalnyata']  = $this->M_Postatus->sumharganyata($kd);
         $data['kdbarang']  = $this->M_Postatus->generatekd();
@@ -2830,11 +2869,12 @@ class C_PoStatus extends CI_Controller
         $hrgnyata = $this->parseNumericInput($this->input->post('hrg_nyata'));
         $qty = $this->parseNumericInput($this->input->post('qty_nyata'));
         $alasan = trim((string) $this->input->post('alasan_realisasi'));
+        $hargaDipakai = strtoupper(trim((string) $this->input->post('harga_dipakai_lifo')));
         $detail = $this->M_Postatus->get_detail_po_nk_row($idpo);
         $statusRow = $this->getPonkStatusRow($kdpo);
 
         if ((!is_super_admin() && $this->session->userdata('lv') != '2') || !$statusRow || !$this->canInputHargaNyata($statusRow->status)) {
-            $this->session->set_flashdata('error', 'Harga nyata hanya dapat diinput Purchasing setelah ACC DIREKTUR.');
+            $this->session->set_flashdata('error', 'Harga nyata hanya dapat diinput Purchasing setelah ACC DIREKTUR, saat proses pembelian, atau pada PO DONE.');
             redirect('detailponk/' . $kdpo);
             return;
         }
@@ -2845,28 +2885,30 @@ class C_PoStatus extends CI_Controller
             return;
         }
 
-        if ($qty <= 0 || $hrgnyata <= 0) {
-            $this->session->set_flashdata('error', 'Qty Nyata dan Harga Nyata wajib lebih besar dari 0.');
+        if ($qty <= 0 || $hrgnyata <= 0 || $alasan === '' || !in_array($hargaDipakai, array('REALISASI', 'PENGAJUAN'), true)) {
+            $this->session->set_flashdata('error', 'Qty, Harga Nyata, pilihan harga, dan catatan keputusan wajib diisi.');
             redirect('detailponk/' . $kdpo);
             return;
         }
 
         $total_harga = $qty * $hrgnyata;
-        $statusApproval = $hrgnyata > (float) $detail->hrg_satuan ? 'PENDING_DIREKTUR' : 'DISETUJUI_OTOMATIS';
+        // Keputusan harga adalah kewenangan Purchasing. Harga realisasi
+        // langsung berlaku dan dicatat pada audit trail tanpa approval Direktur.
+        $statusApproval = 'DISETUJUI_OTOMATIS';
 
         $dataedited = array(
             'hrg_nyata' => $hrgnyata,
             'qty_nyata' => $qty,
             'total_nyata' => $total_harga,
             'status_approval_harga_nyata' => $statusApproval,
-            'alasan_realisasi' => $alasan
+            'alasan_realisasi' => $alasan,
+            'harga_dipakai_lifo' => $hargaDipakai,
+            'catatan_keputusan_harga' => $alasan,
         );
 
         $saved = $this->M_Postatus->simpan_realisasi_harga_nyata($idpo, $dataedited, array(
-            'aksi' => $statusApproval,
-            'keterangan' => $statusApproval === 'PENDING_DIREKTUR'
-                ? 'Harga nyata lebih tinggi dari harga pengajuan dan menunggu approval Direktur.'
-                : 'Harga nyata sama atau lebih rendah dari harga pengajuan.',
+            'aksi' => 'TERCATAT_PURCHASING',
+            'keterangan' => 'Keputusan Purchasing memakai harga ' . ($hargaDipakai === 'REALISASI' ? 'REALISASI' : 'PENGAJUAN') . '. Catatan: ' . $alasan,
             'kd_user' => $this->session->userdata('kode'),
             'nama_user' => $this->session->userdata('nama_user')
         ));
@@ -2877,19 +2919,21 @@ class C_PoStatus extends CI_Controller
             return;
         }
 
-        if ($statusApproval === 'PENDING_DIREKTUR') {
-            $this->M_Postatus->addNote(array(
-                'kd_po' => $kdpo,
-                'isi_note' => 'HARGA NYATA MENUNGGU APPROVAL DIREKTUR - ' . $detail->nama_barang,
-                'kd_user' => $this->session->userdata('kode'),
-                'nama_user' => $this->session->userdata('nama_user'),
-                'note_for' => '1',
-                'update_status' => '1'
-            ));
-            $this->session->set_flashdata('warning', 'Harga nyata lebih tinggi dari harga pengajuan. Menunggu approval Direktur.');
-        } else {
-            $this->session->set_flashdata('success', 'Harga nyata tersimpan dan tidak membutuhkan approval Direktur.');
+        // Harga yang dipilih Purchasing menjadi snapshot harga batch LIFO.
+        // Jika yang dipilih Pengajuan, harga batch tetap pengajuan; harga
+        // realisasi tetap ditampilkan sebagai referensi Purchasing.
+        $lifoSync = $this->M_StockLifo->sync_purchasing_price(
+            $idpo,
+            $hrgnyata,
+            $hargaDipakai,
+            $this->session->userdata('kode')
+        );
+        if (!$lifoSync['success']) {
+            log_message('error', 'Sinkronisasi harga Purchasing ke LIFO gagal: ' . $lifoSync['message']);
         }
+
+        $this->M_Postatus->addNote(array('kd_po' => $kdpo, 'isi_note' => 'HARGA PO TERCATAT DAN LANGSUNG BERLAKU OLEH PURCHASING - ' . $detail->nama_barang . '. Harga dipakai: ' . $hargaDipakai . '. Catatan: ' . $alasan, 'kd_user' => $this->session->userdata('kode'), 'nama_user' => $this->session->userdata('nama_user'), 'note_for' => '2', 'update_status' => '2'));
+        $this->session->set_flashdata('success', 'Harga nyata dan keputusan Purchasing langsung berlaku serta tercatat pada histori.');
 
         redirect('detailponk/' . $kdpo);
     }

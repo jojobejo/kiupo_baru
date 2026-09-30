@@ -21,6 +21,7 @@ class C_Stocknonkomersil extends CI_Controller
         $this->load->model('PO/M_Postatus');
         $this->load->model('PO/M_Purchase');
         $this->load->library('form_validation');
+        $this->load->library('pagination');
     }
 
     public function index()
@@ -94,11 +95,24 @@ class C_Stocknonkomersil extends CI_Controller
         $data['title']      = 'Detail Stock Barang';
         $data['kdgenerate'] = $this->M_Stocknonkomersil->getgeneratekd();
         $data['item']       = $this->M_Stocknonkomersil->get_data_item($kdbarang)->result();
-        $data['stock']      = $this->M_Stocknonkomersil->get_detail_transaksi_itm($kdbarang)->result();
+        $data['stock']      = $this->get_transaction_page($kdbarang);
         $data['note']       = $this->M_Stocknonkomersil->get_note($kdbarang);
         $data['trash']      = $this->M_Stocknonkomersil->get_data_trash($kdbarang)->result();
         $data['lifo_summary'] = $this->M_StockLifo->get_summary($kdbarang);
         $data['lifo_batches'] = $this->M_StockLifo->get_active_batches($kdbarang);
+        $historyPerPage = 5;
+        $historyTotal = $this->M_StockLifo->count_batch_history_lifo($kdbarang);
+        $historyPage = max(1, (int) $this->input->get('history_page'));
+        $historyLastPage = max(1, (int) ceil($historyTotal / $historyPerPage));
+        if ($historyPage > $historyLastPage) {
+            $historyPage = $historyLastPage;
+        }
+        $data['lifo_batch_history'] = $this->M_StockLifo->get_batch_history_lifo($kdbarang, $historyPerPage, ($historyPage - 1) * $historyPerPage);
+        $data['history_total'] = $historyTotal;
+        $data['history_page'] = $historyPage;
+        $data['history_last_page'] = $historyLastPage;
+        $data['history_tab_active'] = $this->input->get('history_page') !== null;
+        $data['lifo_last_price'] = $this->M_StockLifo->get_latest_price($kdbarang);
         $data['can_manage_lifo_price'] = $this->can_manage_lifo();
 
         $this->load->view('partial/header', $data);
@@ -343,9 +357,11 @@ class C_Stocknonkomersil extends CI_Controller
 
     public function filterqtybytgl()
     {
-        $start_date = $this->input->post('start_date');
-        $end_date = $this->input->post('end_date');
-        $kdbarang = $this->input->post('kdbarang');
+        // POST is used by the search form, while GET keeps the filter intact
+        // when a pagination link is opened.
+        $start_date = $this->input->post('start_date', true) ?: $this->input->get('start_date', true);
+        $end_date = $this->input->post('end_date', true) ?: $this->input->get('end_date', true);
+        $kdbarang = $this->input->post('kdbarang', true) ?: $this->input->get('kdbarang', true);
 
         $data['title']      = 'Detail Stock Barang By Tanggal';
         $data['start_date'] = $start_date;
@@ -353,13 +369,69 @@ class C_Stocknonkomersil extends CI_Controller
 
         $data['item']       = $this->M_Stocknonkomersil->get_item_bytgl($start_date, $end_date, $kdbarang)->result();
         $data['note']       = $this->M_Stocknonkomersil->get_note($kdbarang);
-        $data['stock']      = $this->M_Stocknonkomersil->get_detail_transaksi_itm_date($start_date, $end_date, $kdbarang)->result();
+        $data['stock']      = $this->get_transaction_page($kdbarang, $start_date, $end_date);
 
         $this->load->view('partial/header', $data);
         $this->load->view('partial/sidebar');
         $this->load->view('content/stock/nonkomersil/stock_detailitm', $data);
         $this->load->view('partial/footer');
         $this->load->view('content/stock/nonkomersil/datatables');
+    }
+
+    /**
+     * Fetch and configure a ten-row transaction history page.
+     */
+    private function get_transaction_page($kdbarang, $start_date = null, $end_date = null)
+    {
+        $per_page = 10;
+        $offset = max(0, (int) $this->input->get('per_page'));
+        $total_rows = $this->M_Stocknonkomersil->count_detail_transaksi_itm($kdbarang, $start_date, $end_date);
+
+        if ($offset >= $total_rows && $total_rows > 0) {
+            $offset = (int) (floor(($total_rows - 1) / $per_page) * $per_page);
+        }
+
+        $config = array(
+            'base_url' => $start_date === null
+                ? base_url('detailtransaksi/' . rawurlencode($kdbarang))
+                : base_url('stock/filterqtybytgl'),
+            'total_rows' => $total_rows,
+            'per_page' => $per_page,
+            'page_query_string' => true,
+            'query_string_segment' => 'per_page',
+            'reuse_query_string' => true,
+            'full_tag_open' => '<nav aria-label="Navigasi halaman"><ul class="pagination justify-content-center">',
+            'full_tag_close' => '</ul></nav>',
+            'attributes' => array('class' => 'page-link'),
+            'num_tag_open' => '<li class="page-item">',
+            'num_tag_close' => '</li>',
+            'cur_tag_open' => '<li class="page-item active" aria-current="page"><span class="page-link">',
+            'cur_tag_close' => '</span></li>',
+            'next_tag_open' => '<li class="page-item">',
+            'next_tag_close' => '</li>',
+            'prev_tag_open' => '<li class="page-item">',
+            'prev_tag_close' => '</li>',
+            'first_tag_open' => '<li class="page-item">',
+            'first_tag_close' => '</li>',
+            'last_tag_open' => '<li class="page-item">',
+            'last_tag_close' => '</li>',
+        );
+
+        if ($start_date !== null) {
+            // Make POST-submitted filter values available to CI Pagination's
+            // reuse_query_string option for the first page as well.
+            $_GET['start_date'] = $start_date;
+            $_GET['end_date'] = $end_date;
+            $_GET['kdbarang'] = $kdbarang;
+        }
+
+        $this->pagination->initialize($config);
+        $this->load->vars(array(
+            'pagination' => $this->pagination->create_links(),
+            'transaction_total' => $total_rows,
+        ));
+
+        return $this->M_Stocknonkomersil->get_detail_transaksi_itm($kdbarang, $per_page, $offset, $start_date, $end_date)->result();
     }
     public function tr_allstock()
     {
@@ -415,12 +487,6 @@ class C_Stocknonkomersil extends CI_Controller
             ];
 
             $result = $this->M_Stocknonkomersil->get_stock_datatable($params);
-            if (!$this->can_manage_lifo()) {
-                foreach ($result['data'] as $row) {
-                    unset($row->batch_lifo_aktif, $row->qty_lifo_perlu_harga, $row->nilai_lifo, $row->harga_lifo_aktif);
-                }
-            }
-
             $this->output
                 ->set_content_type('application/json')
                 ->set_output(json_encode([
@@ -433,12 +499,6 @@ class C_Stocknonkomersil extends CI_Controller
         }
 
         $stock = $this->M_Stocknonkomersil->v_stock($lokasi, $status_stock);
-        if (!$this->can_manage_lifo()) {
-            foreach ($stock as $row) {
-                unset($row->batch_lifo_aktif, $row->qty_lifo_perlu_harga, $row->nilai_lifo, $row->harga_lifo_aktif);
-            }
-        }
-
         $this->output
             ->set_content_type('application/json')
             ->set_output(json_encode([

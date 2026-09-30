@@ -101,16 +101,8 @@
                         }
                     },
                     {
-                        "data": "batch_lifo_aktif",
-                        "render": function(data) { return escHtml(formatQty(data)); }
-                    },
-                    {
-                        "data": "harga_lifo_aktif",
+                        "data": "harga_terakhir_pembelian",
                         "render": function(data) { return data === null ? '-' : escHtml(formatCurrency(data)); }
-                    },
-                    {
-                        "data": "nilai_lifo",
-                        "render": function(data) { return escHtml(formatCurrency(data)); }
                     },
                     {
                         "data": null,
@@ -118,12 +110,6 @@
                     },
                     {
                         "data": "minimum_stock",
-                        "render": function(data) {
-                            return escHtml(formatQty(data));
-                        }
-                    },
-                    {
-                        "data": "qty_saran_po",
                         "render": function(data) {
                             return escHtml(formatQty(data));
                         }
@@ -182,13 +168,11 @@
                         }
                     },
                     {
-                        "data": "minimum_stock",
-                        "render": function(data) {
-                            return escHtml(formatQty(data));
-                        }
+                        "data": "harga_terakhir_pembelian",
+                        "render": function(data) { return data === null ? '-' : escHtml(formatCurrency(data)); }
                     },
                     {
-                        "data": "qty_saran_po",
+                        "data": "minimum_stock",
                         "render": function(data) {
                             return escHtml(formatQty(data));
                         }

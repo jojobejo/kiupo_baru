@@ -36,7 +36,20 @@ class C_Laporan extends CI_Controller
     {
         $this->load_spreadsheet_library();
         $writer = PHPExcel_IOFactory::createWriter($excel, 'Excel2007');
-        $tempFile = tempnam(sys_get_temp_dir(), 'ponk_xlsx_');
+        // The XAMPP worker cannot access the macOS per-user system temp folder.
+        // Keep the export temporary file in CodeIgniter's writable cache instead.
+        $exportTempDirectory = APPPATH . 'cache/excel_exports';
+        if (!is_dir($exportTempDirectory) && !@mkdir($exportTempDirectory, 0777, true)) {
+            show_error('Folder temporary export Excel tidak dapat dibuat: ' . $exportTempDirectory, 500);
+            return;
+        }
+
+        if (!is_writable($exportTempDirectory)) {
+            show_error('Folder temporary export Excel tidak dapat ditulis: ' . $exportTempDirectory, 500);
+            return;
+        }
+
+        $tempFile = tempnam($exportTempDirectory, 'ponk_xlsx_');
 
         if ($tempFile === false) {
             show_error('Gagal membuat file temporary export Excel.', 500);
@@ -135,7 +148,7 @@ class C_Laporan extends CI_Controller
         );
 
         $excel->setActiveSheetIndex(0)->setCellValue('A1', "Rekap Laporan Pembelian Non Komersil");
-        $excel->getActiveSheet()->mergeCells('A1:J1');
+        $excel->getActiveSheet()->mergeCells('A1:M1');
         $excel->getActiveSheet()->getStyle('A1')->getFont()->setBold(TRUE);
         $excel->getActiveSheet()->getStyle('A1')->getFont()->setSize(15);
         $excel->getActiveSheet()->getStyle('A1')->getAlignment()->setHorizontal(PHPExcel_Style_Alignment::HORIZONTAL_CENTER);
@@ -150,6 +163,9 @@ class C_Laporan extends CI_Controller
         $excel->setActiveSheetIndex(0)->setCellValue('H3', "QTY");
         $excel->setActiveSheetIndex(0)->setCellValue('I3', "Harga Satuan");
         $excel->setActiveSheetIndex(0)->setCellValue('J3', "Total Harga");
+        $excel->setActiveSheetIndex(0)->setCellValue('K3', "Harga Edit Purchasing");
+        $excel->setActiveSheetIndex(0)->setCellValue('L3', "Referensi Pembelian LIFO");
+        $excel->setActiveSheetIndex(0)->setCellValue('M3', "Tanggal Pembelian LIFO");
 
         $excel->getActiveSheet()->getStyle('A3')->applyFromArray($style_col);
         $excel->getActiveSheet()->getStyle('B3')->applyFromArray($style_col);
@@ -161,6 +177,9 @@ class C_Laporan extends CI_Controller
         $excel->getActiveSheet()->getStyle('H3')->applyFromArray($style_col);
         $excel->getActiveSheet()->getStyle('I3')->applyFromArray($style_col);
         $excel->getActiveSheet()->getStyle('J3')->applyFromArray($style_col);
+        $excel->getActiveSheet()->getStyle('K3')->applyFromArray($style_col);
+        $excel->getActiveSheet()->getStyle('L3')->applyFromArray($style_col);
+        $excel->getActiveSheet()->getStyle('M3')->applyFromArray($style_col);
 
         $vartgl1           = $_SESSION['vartgl1'];
         $vartgl2            = $_SESSION['vartgl2'];
@@ -185,6 +204,9 @@ class C_Laporan extends CI_Controller
             $excel->setActiveSheetIndex(0)->setCellValue('H' . $numrow, $data->qty);
             $excel->setActiveSheetIndex(0)->setCellValue('I' . $numrow, $data->hrg_satuan);
             $excel->setActiveSheetIndex(0)->setCellValue('J' . $numrow, $data->total_harga);
+            $excel->setActiveSheetIndex(0)->setCellValue('K' . $numrow, $data->harga_edit_purchasing);
+            $excel->setActiveSheetIndex(0)->setCellValue('L' . $numrow, $data->referensi_pembelian_lifo ?: '-');
+            $excel->setActiveSheetIndex(0)->setCellValue('M' . $numrow, $data->tanggal_pembelian_lifo ?: '-');
             $excel->getActiveSheet()->getStyle('A' . $numrow)->applyFromArray($style_row);
             $excel->getActiveSheet()->getStyle('B' . $numrow)->applyFromArray($style_row);
             $excel->getActiveSheet()->getStyle('C' . $numrow)->applyFromArray($style_row);
@@ -195,6 +217,9 @@ class C_Laporan extends CI_Controller
             $excel->getActiveSheet()->getStyle('H' . $numrow)->applyFromArray($style_row);
             $excel->getActiveSheet()->getStyle('I' . $numrow)->applyFromArray($style_row);
             $excel->getActiveSheet()->getStyle('J' . $numrow)->applyFromArray($style_row);
+            $excel->getActiveSheet()->getStyle('K' . $numrow)->applyFromArray($style_row);
+            $excel->getActiveSheet()->getStyle('L' . $numrow)->applyFromArray($style_row);
+            $excel->getActiveSheet()->getStyle('M' . $numrow)->applyFromArray($style_row);
             $no++;
             $numrow++;
         }
@@ -209,6 +234,9 @@ class C_Laporan extends CI_Controller
         $excel->getActiveSheet()->getColumnDimension('H')->setWidth(10);
         $excel->getActiveSheet()->getColumnDimension('I')->setWidth(15);
         $excel->getActiveSheet()->getColumnDimension('J')->setWidth(15);
+        $excel->getActiveSheet()->getColumnDimension('K')->setWidth(22);
+        $excel->getActiveSheet()->getColumnDimension('L')->setWidth(24);
+        $excel->getActiveSheet()->getColumnDimension('M')->setWidth(22);
         $excel->getActiveSheet()->getDefaultRowDimension()->setRowHeight(-1);
         $excel->getActiveSheet()->getPageSetup()->setOrientation(PHPExcel_Worksheet_PageSetup::ORIENTATION_LANDSCAPE);
         $excel->getActiveSheet()->setTitle("lap_" . $vartglexcel1 . "_" . $vartglexcel2);
@@ -330,8 +358,9 @@ class C_Laporan extends CI_Controller
     {
         $tglstart = $this->input->post('tglstart');
         $tglend = $this->input->post('tglend');
+        $pengambilanSaja = $this->input->post('jenis_transaksi') === 'PENGAMBILAN';
 
-        $result = $this->M_Laporanp->getdaterangelaptr($tglstart, $tglend)->result();
+        $result = $this->M_Laporanp->getdaterangelaptr($tglstart, $tglend, $this->stock_history_scope(), $pengambilanSaja)->result();
 
         $data = [];
         $no = 1;
@@ -339,15 +368,18 @@ class C_Laporan extends CI_Controller
             $data[] = [
                 $no++,
                 $row->tgl_transaksi,
+                $row->nama_user,
                 $row->departement,
                 $row->nama_barang,
                 $row->keterangan,
                 $row->qty,
                 $row->jn_transaksi,
+                $row->nominal_satuan,
+                $row->batch_lifo,
             ];
         }
 
-        echo json_encode(['data' => $data]);
+        $this->output->set_content_type('application/json')->set_output(json_encode(array('data' => $data)));
     }
     public function exported_tr_allnk()
     {
@@ -361,18 +393,19 @@ class C_Laporan extends CI_Controller
             return;
         }
 
-        $export = $this->M_Laporanp->getdaterangelaptr($tgl1, $tgl2)->result();
+        $pengambilanSaja = $this->input->get('jenis_transaksi') === 'PENGAMBILAN';
+        $export = $this->M_Laporanp->getdaterangelaptr($tgl1, $tgl2, $this->stock_history_scope(), $pengambilanSaja)->result();
 
         $excel = new PHPExcel();
         $excel->getProperties()->setCreator('Aplikasi Laporan')
-            ->setTitle('Rekap Laporan Transaksi Non Komersil');
+            ->setTitle($pengambilanSaja ? 'Rekap Histori Pengambilan Barang' : 'Rekap Laporan Transaksi Non Komersil');
 
         $excel->setActiveSheetIndex(0);
         $sheet = $excel->getActiveSheet()->setTitle('Laporan');
 
         // Header
-        $sheet->setCellValue('A1', 'Rekap Laporan Transaksi Non Komersil');
-        $sheet->mergeCells('A1:J1');
+        $sheet->setCellValue('A1', $pengambilanSaja ? 'Rekap Histori Pengambilan Barang' : 'Rekap Laporan Transaksi Non Komersil');
+        $sheet->mergeCells('A1:L1');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
         $sheet->getStyle('A1')->getAlignment()->setHorizontal(PHPExcel_Style_Alignment::HORIZONTAL_CENTER);
 
@@ -387,6 +420,8 @@ class C_Laporan extends CI_Controller
         $sheet->setCellValue('H3', 'Keterangan');
         $sheet->setCellValue('I3', 'Qty');
         $sheet->setCellValue('J3', 'Jenis Transaksi');
+        $sheet->setCellValue('K3', 'Nominal Satuan');
+        $sheet->setCellValue('L3', 'Batch / Referensi LIFO');
 
         $no = 1;
         $row = 4;
@@ -427,6 +462,8 @@ class C_Laporan extends CI_Controller
             $sheet->setCellValue("H$row", $data->keterangan);
             $sheet->setCellValue("I$row", $data->qty);
             $sheet->setCellValue("J$row", $jenis);
+            $sheet->setCellValue("K$row", (float) $data->nominal_satuan);
+            $sheet->setCellValue("L$row", $data->batch_lifo ?: '-');
 
             $row++;
         }
@@ -440,7 +477,7 @@ class C_Laporan extends CI_Controller
                 ]
             ]
         ];
-        $sheet->getStyle("A3:J" . ($row - 1))->applyFromArray($styleArray);
+        $sheet->getStyle("A3:L" . ($row - 1))->applyFromArray($styleArray);
         $sheet->getColumnDimension('A')->setWidth(5);
         $sheet->getColumnDimension('B')->setWidth(20);
         $sheet->getColumnDimension('C')->setWidth(15);
@@ -451,10 +488,29 @@ class C_Laporan extends CI_Controller
         $sheet->getColumnDimension('H')->setWidth(30);
         $sheet->getColumnDimension('I')->setWidth(6);
         $sheet->getColumnDimension('J')->setWidth(20);
+        $sheet->getColumnDimension('K')->setWidth(18);
+        $sheet->getColumnDimension('L')->setWidth(40);
 
-        $filename = 'Laporan_Transaksi_NonKomersil_' . $tgl1 . '_to_' . $tgl2 . '.xlsx';
+        $filename = ($pengambilanSaja ? 'Histori_Pengambilan_Barang_' : 'Laporan_Transaksi_NonKomersil_') . $tgl1 . '_to_' . $tgl2 . '.xlsx';
 
         $this->download_excel2007($excel, $filename);
+    }
+
+    /** PIC hanya melihat pengambilannya sendiri; KADEP hanya departemennya. */
+    private function stock_history_scope()
+    {
+        if (is_super_admin()) {
+            return array();
+        }
+
+        $level = (string) $this->session->userdata('lv');
+        if ($level === '4') {
+            return array('kode_user' => $this->session->userdata('kode'));
+        }
+        if ($level === '5') {
+            return array('departemen' => $this->session->userdata('departemen'));
+        }
+        return array();
     }
 
     private function is_valid_date_export($date)

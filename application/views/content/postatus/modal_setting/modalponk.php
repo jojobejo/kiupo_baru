@@ -742,6 +742,7 @@
     <?php
     $qtyNyataModal = isset($s->qty_nyata) && (float) $s->qty_nyata > 0 ? (float) $s->qty_nyata : (float) $s->qty;
     $alasanRealisasiModal = isset($s->alasan_realisasi) ? $s->alasan_realisasi : '';
+    $hargaDipakaiModal = isset($s->harga_dipakai_lifo) ? $s->harga_dipakai_lifo : 'REALISASI';
     ?>
     <div class="modal fade" id="hrgnyata<?= $s->id_det_po_nk ?>">
         <div class="modal-dialog modal-lg">
@@ -787,8 +788,14 @@
                     </div>
                     <div class="form-group">
                         <div class="row">
-                            <label class="col-sm-3 control-label text-right" for="alasan_realisasi">Alasan Selisih</label>
-                            <div class="col-sm-8"><textarea class="form-control" id="alasan_realisasi" name="alasan_realisasi" rows="3"><?= htmlspecialchars($alasanRealisasiModal, ENT_QUOTES, 'UTF-8') ?></textarea></div>
+                            <label class="col-sm-3 control-label text-right" for="harga_dipakai_lifo">Harga Dipakai</label>
+                            <div class="col-sm-8"><select class="form-control" id="harga_dipakai_lifo" name="harga_dipakai_lifo" required><option value="REALISASI" <?= $hargaDipakaiModal === 'REALISASI' ? 'selected' : '' ?>>Harga realisasi Purchasing</option><option value="PENGAJUAN" <?= $hargaDipakaiModal === 'PENGAJUAN' ? 'selected' : '' ?>>Harga pengajuan PO</option></select></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="row">
+                            <label class="col-sm-3 control-label text-right" for="alasan_realisasi">Catatan Keputusan<span class="required">*</span></label>
+                            <div class="col-sm-8"><textarea class="form-control" id="alasan_realisasi" name="alasan_realisasi" rows="3" required><?= htmlspecialchars($alasanRealisasiModal, ENT_QUOTES, 'UTF-8') ?></textarea></div>
                         </div>
                     </div>
                 </div>

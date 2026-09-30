@@ -24,7 +24,7 @@ FROM (
     UNION ALL SELECT 'tbpo_jasa_purchase_receipt'
     UNION ALL SELECT 'tbpo_jasa_spk'
     UNION ALL SELECT 'tbpo_jasa_pickup_request'
-    UNION ALL SELECT 'tbpo_stock_lifo_batch'
+    UNION ALL SELECT 'tbpo_stock_lifo_batch_nk'
     UNION ALL SELECT 'tbpo_stock_lifo_allocation'
 ) AS required
 LEFT JOIN information_schema.tables AS existing_table

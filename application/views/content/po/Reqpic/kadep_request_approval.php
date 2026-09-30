@@ -30,6 +30,22 @@
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+                <?php if (!empty($history)) : ?>
+                    <hr>
+                    <div class="alert alert-info"><i class="fas fa-bell"></i> Ada request yang telah diteruskan Purchasing setelah batas waktu approval 5 menit. Data tetap tersedia sebagai histori KADEP.</div>
+                    <h5>Histori diteruskan Purchasing</h5>
+                    <table class="table table-bordered table-sm">
+                        <thead class="table-light"><tr><th>Kode Request</th><th>PIC</th><th>Departemen</th><th>Diproses Purchasing</th><th>Status Saat Ini</th><th>Detail</th></tr></thead>
+                        <tbody><?php foreach ($history as $item) : ?><tr>
+                            <td><?= htmlspecialchars($item->kd_po_nk, ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= htmlspecialchars($item->nm_user, ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= htmlspecialchars($item->departemen, ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= htmlspecialchars($item->purchasing_opened_at, ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= htmlspecialchars($item->status, ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><a href="<?= base_url('reqpic/detreqbarangpic/' . rawurlencode($item->kd_po_nk)) ?>" class="btn btn-outline-primary btn-sm"><i class="fas fa-eye"></i></a></td>
+                        </tr><?php endforeach; ?></tbody>
+                    </table>
+                <?php endif; ?>
                 <?php foreach ($requests as $request) : ?>
                     <div class="modal fade" id="requestDecision<?= htmlspecialchars($request->kd_po_nk, ENT_QUOTES, 'UTF-8') ?>" tabindex="-1" role="dialog" aria-hidden="true"><div class="modal-dialog" role="document">
                         <form action="<?= base_url('process_req_kadep') ?>" method="post" class="modal-content">

@@ -90,6 +90,7 @@
                 data: function(d) {
                     d.tglstart = $('#tglstart').val();
                     d.tglend = $('#tglend').val();
+                    d.jenis_transaksi = $('#jenis_transaksi').val();
                 },
                 dataSrc: 'data'
             },
@@ -113,6 +114,9 @@
                 },
                 {
                     data: 6,
+                },
+                {
+                    data: 7,
                     render: function(data, type, row) {
                         // data disini adalah nilai jn_transaksi (11512, dll)
                         switch (data) {
@@ -128,10 +132,19 @@
                                 return '<button class="btn btn-block btn-sm btn-secondary color-palette">Lainnya</button>';
                         }
                     }
+                },
+                {
+                    data: 8,
+                    render: function(data) { return 'Rp ' + Number(data || 0).toLocaleString('id-ID'); }
+                },
+                {
+                    data: 9,
+                    render: function(data) { return data || '-'; }
                 }
             ],
             searching: true,
-            paging: true
+            paging: true,
+            autoWidth: false
         });
 
         $('#formFilter').on('submit', function(e) {
@@ -143,13 +156,14 @@
             e.preventDefault();
             const tglstart = $('#tglstart').val();
             const tglend = $('#tglend').val();
+            const jenisTransaksi = $('#jenis_transaksi').val();
 
             if (!tglstart || !tglend) {
                 alert("Tanggal harus diisi!");
                 return;
             }
 
-            const url = `<?= base_url('exported_tr_allnk') ?>?tglstart=${tglstart}&tglend=${tglend}`;
+            const url = `<?= base_url('exported_tr_allnk') ?>?tglstart=${tglstart}&tglend=${tglend}&jenis_transaksi=${jenisTransaksi}`;
             window.location.href = url;
         });
 

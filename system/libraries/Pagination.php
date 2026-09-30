@@ -523,7 +523,10 @@ class CI_Pagination {
 		}
 
 		// If something isn't quite right, back to the default base page.
-		if ( ! ctype_digit($this->cur_page) OR ($this->use_page_numbers && (int) $this->cur_page === 0))
+		// PHP 8.1+ deprecates passing NULL to ctype_digit(). A missing query
+		// string page parameter is a valid first-page request, so normalize it
+		// before validating the value.
+		if ( ! ctype_digit((string) $this->cur_page) OR ($this->use_page_numbers && (int) $this->cur_page === 0))
 		{
 			$this->cur_page = $base_page;
 		}

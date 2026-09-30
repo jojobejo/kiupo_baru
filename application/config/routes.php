@@ -263,6 +263,7 @@ $route['index_brsedia']                                 = 'purchaseorder/C_Reqpi
 $route['index_done']                                    = 'purchaseorder/C_Reqpic/index_done';
 $route['reqpicpickup']                                  = 'purchaseorder/C_Reqpic/index_pickup';
 $route['reqpicpickupapproval']                          = 'purchaseorder/C_Reqpic/index_pickup_approval_kadep';
+$route['historipengambilanpic']                         = 'purchaseorder/C_Reqpic/history_pickup_pic';
 $route['listbarangready']                               = 'purchaseorder/C_Reqpic/list_barang_ready';
 $route['add_mbarang_tmp']                               = 'purchaseorder/C_Reqpic/addrequestmasterbarangready';
 $route['addtmpreqbarang']                               = 'purchaseorder/C_Reqpic/addtmpreqbarang';

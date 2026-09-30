@@ -56,12 +56,9 @@
                                     <td>Nama Barang</td>
                                     <td>Deskripsi</td>
                                     <td>Stock</td>
-                                    <td>Batch LIFO</td>
-                                    <td>Harga LIFO Aktif</td>
-                                    <td>Nilai Stok LIFO</td>
+                                    <td>Harga Terakhir Pembelian</td>
                                     <td>Status Harga</td>
                                     <td>Minimum Stock</td>
-                                    <td>Saran PO</td>
                                     <td>Status</td>
                                     <td>Satuan</td>
                                     <td>Lokasi</td>
@@ -114,8 +111,8 @@
                                     <td>Nama Barang</td>
                                     <td>Deskripsi</td>
                                     <td>Stock</td>
+                                    <td>Harga Terakhir Pembelian</td>
                                     <td>Minimum Stock</td>
-                                    <td>Saran PO</td>
                                     <td>Status</td>
                                     <td>Satuan</td>
                                     <td>Lokasi</td>

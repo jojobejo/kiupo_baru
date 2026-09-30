@@ -803,6 +803,14 @@
             </a>
           </li>
           <li class="nav-item">
+            <a href="<?= base_url('historipengambilanpic') ?>" class="nav-link">
+              <i class="nav-icon fas fa-history"></i>
+              <p>
+                Histori Pengambilan PIC
+              </p>
+            </a>
+          </li>
+          <li class="nav-item">
             <a href="<?= base_url('pojasa/workflow') ?>" class="nav-link">
               <i class="nav-icon fas fa-tools"></i>
               <p>

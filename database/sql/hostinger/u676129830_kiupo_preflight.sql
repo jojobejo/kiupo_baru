@@ -15,7 +15,7 @@ FROM (
   UNION ALL SELECT 'tbpo_jasa_material'
   UNION ALL SELECT 'tbpo_jasa_purchase_submission'
   UNION ALL SELECT 'tbpo_req_nk_supporting_file'
-  UNION ALL SELECT 'tbpo_stock_lifo_batch'
+  UNION ALL SELECT 'tbpo_stock_lifo_batch_nk'
 ) AS required
 LEFT JOIN information_schema.tables existing_table
   ON existing_table.table_schema = DATABASE()

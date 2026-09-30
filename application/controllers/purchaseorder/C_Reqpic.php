@@ -13,6 +13,7 @@ class C_Reqpic extends CI_Controller
         $this->load->model('PO/M_Reqpic');
         $this->load->model('PO/M_Purchase');
         $this->load->model('PO/M_Postatus');
+        $this->load->model('stock/M_StockLifo');
         $this->load->library('form_validation');
     }
 
@@ -159,6 +160,27 @@ class C_Reqpic extends CI_Controller
         $this->load->view('content/po/Reqpic/datatablesreq');
     }
 
+    /** Histori seluruh pengajuan PIC dan PO untuk departemen KADEP. */
+    public function history_pickup_pic()
+    {
+        if ((string) $this->session->userdata('lv') !== '5' && !is_super_admin()) {
+            show_404();
+            return;
+        }
+
+        $data['title'] = 'Histori Pengambilan PIC';
+        $data['requests'] = $this->M_Reqpic->get_pickup_pic_history(
+            $this->session->userdata('departemen'),
+            is_super_admin()
+        )->result();
+
+        $this->load->view('partial/header', $data);
+        $this->load->view('partial/sidebar');
+        $this->load->view('content/po/Reqpic/history_pickup_pic', $data);
+        $this->load->view('partial/footer');
+        $this->load->view('content/po/Reqpic/datatablesreq');
+    }
+
     public function index_accreq()
     {
         $kduser = $this->session->userdata('kode');
@@ -230,9 +252,29 @@ class C_Reqpic extends CI_Controller
 
         $request = $this->M_Reqpic->getrequestrow($kdpo);
         if (!$this->M_Reqpic->can_purchasing_process($request)) {
-            $this->session->set_flashdata('error', 'Request masih menunggu ACC KADEP. Purchasing dapat memprosesnya setelah KADEP menyetujui request.');
+            $this->session->set_flashdata('error', 'Request masih menunggu ACC KADEP. Purchasing dapat memprosesnya setelah 5 menit sejak request diajukan atau setelah KADEP menyetujuinya.');
             redirect('reqpic/detreqbarangpic/' . rawurlencode($kdpo));
             return false;
+        }
+
+        // Bila pintu Purchasing terbuka karena timeout (bukan keputusan KADEP),
+        // simpan jejaknya agar KADEP masih dapat melihatnya pada tab histori.
+        if ($request && trim((string) $request->status) === 'ON PROGRESS - BELUM ACC'
+            && empty($request->purchasing_opened_at)) {
+            $openedAt = date('Y-m-d H:i:s');
+            $timeoutUpdate = array('purchasing_opened_at' => $openedAt);
+            if ($this->db->field_exists('purchasing_timeout_opened_at', 'tbpo_req_nk')) {
+                $timeoutUpdate['purchasing_timeout_opened_at'] = $openedAt;
+            }
+            $this->M_Reqpic->updatereqnk($kdpo, $timeoutUpdate);
+            $this->M_Purchase->addNote(array(
+                'kd_po' => $kdpo,
+                'isi_note' => 'PURCHASING MEMPROSES REQUEST SETELAH BATAS WAKTU APPROVAL KADEP 5 MENIT',
+                'kd_user' => $this->session->userdata('kode'),
+                'nama_user' => $this->session->userdata('nama_user'),
+                'note_for' => '2',
+                'update_status' => '2',
+            ));
         }
         return true;
     }
@@ -273,6 +315,10 @@ class C_Reqpic extends CI_Controller
         $data['requests'] = $this->M_Reqpic->getlistpicreqkadep(
             $this->session->userdata('departemen'),
             $this->session->userdata('kode')
+        )->result();
+        $data['history'] = $this->M_Reqpic->getlistpicreqkadep_history(
+            $this->session->userdata('departemen'),
+            is_super_admin()
         )->result();
         $this->load->view('partial/header', $data);
         $this->load->view('partial/sidebar');
@@ -992,6 +1038,7 @@ class C_Reqpic extends CI_Controller
             $data['detreq']             = $this->M_Reqpic->getreqwheres($kdpo)->result();
             $data['log']                = $this->M_Reqpic->getNoted($kdpo);
             $data['supportingDocuments'] = $this->M_Reqpic->get_supporting_documents($kdpo);
+            $data['lifoPickup']          = $this->M_Reqpic->get_lifo_pickup_details($kdpo);
 
             $this->load->view('partial/header', $data);
             $this->load->view('partial/sidebar');
@@ -1018,6 +1065,7 @@ class C_Reqpic extends CI_Controller
             $data['gettrs']          = $this->M_Reqpic->gettr($kdpo)->result();
             $data['gettr']           = $this->M_Reqpic->getdetailreq($kdpo)->result();
             $data['supportingDocuments'] = $this->M_Reqpic->get_supporting_documents($kdpo);
+            $data['lifoPickup']          = $this->M_Reqpic->get_lifo_pickup_details($kdpo);
             $data['purchasingCanProcess'] = $this->M_Reqpic->can_purchasing_process(
                 $this->M_Reqpic->getrequestrow($kdpo)
             );
@@ -1048,6 +1096,7 @@ class C_Reqpic extends CI_Controller
             $data['detreq']             = $this->M_Reqpic->getreqwheres($kdpo)->result();
             $data['log']                = $this->M_Reqpic->getNoted($kdpo);
             $data['supportingDocuments'] = $this->M_Reqpic->get_supporting_documents($kdpo);
+            $data['lifoPickup']          = $this->M_Reqpic->get_lifo_pickup_details($kdpo);
 
             $this->load->view('partial/header', $data);
             $this->load->view('partial/sidebar');
@@ -1995,6 +2044,9 @@ class C_Reqpic extends CI_Controller
                             $sts = 'tmp-req';
 
                             $this->M_Reqpic->input_tr($dataconfirm);
+                            if ($this->M_StockLifo->schema_ready()) {
+                                $this->M_StockLifo->allocate_new_outgoing((int) $this->db->insert_id());
+                            }
                             $this->M_Reqpic->deleteitemtrtmp($kdponk, $kduser, $sts);
                         } else {
                             $dataconfirm = array(
@@ -2013,6 +2065,9 @@ class C_Reqpic extends CI_Controller
                                 'last_updated_by'   => $this->session->userdata('kode')
                             );
                             $this->M_Reqpic->input_tr($dataconfirm);
+                            if ($this->M_StockLifo->schema_ready()) {
+                                $this->M_StockLifo->allocate_new_outgoing((int) $this->db->insert_id());
+                            }
                         }
                     }
                 }
@@ -2054,6 +2109,9 @@ class C_Reqpic extends CI_Controller
                         'last_updated_by'   => $this->session->userdata('kode')
                     );
                     $this->M_Reqpic->input_tr($dataconfirm);
+                    if ($this->M_StockLifo->schema_ready()) {
+                        $this->M_StockLifo->allocate_new_outgoing((int) $this->db->insert_id());
+                    }
                 }
                 redirect('reqpic/detreqbarangpic/' . $kdponk);
             }

@@ -21,6 +21,7 @@ $migrations = array(
     'database/sql/hostinger/u676129830_kiupo_reqpic_legacy_duplicates.sql',
     'database/sql/reqpic_pickup_status_length_20260917.sql',
     'database/sql/reqpic_kadep_timeout_workflow_20260923.sql',
+    'database/sql/stock_nonkomersil_lifo_batch_nk_rename_20260925.sql',
     'database/sql/stock_nonkomersil_lifo_foundation_20260918.sql',
     'docs/database/2026-09-02-po-jasa-tahap1.sql',
     'docs/database/2026-09-02-po-jasa-vendor-workflow.sql',

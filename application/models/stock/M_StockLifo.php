@@ -7,7 +7,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
  */
 class M_StockLifo extends CI_Model
 {
-    private $batchTable = 'tbpo_stock_lifo_batch';
+    private $batchTable = 'tbpo_stock_lifo_batch_nk';
 
     public function schema_ready()
     {
@@ -84,9 +84,47 @@ class M_StockLifo extends CI_Model
     public function get_active_batches($kodeBarang)
     {
         if (!$this->schema_ready()) { return array(); }
-        return $this->db->where(array('kd_barang' => $kodeBarang, 'status_batch' => 'AKTIF'))
-            ->where('qty_sisa >', 0)->order_by('tgl_efektif', 'DESC')->order_by('id_batch', 'DESC')
-            ->get($this->batchTable)->result();
+        return $this->batch_list_query($kodeBarang)
+            ->where(array('lb.status_batch' => 'AKTIF'))
+            ->where('lb.qty_sisa >', 0)->order_by('lb.tgl_efektif', 'DESC')->order_by('lb.id_batch', 'DESC')
+            ->get()->result();
+    }
+
+    /**
+     * Seluruh batch untuk panel histori: batch aktif diprioritaskan, lalu
+     * batch habis dari yang terbaru hingga batch habis paling lama.
+     */
+    public function count_batch_history_lifo($kodeBarang)
+    {
+        if (!$this->schema_ready()) { return 0; }
+        return (int) $this->db->where('kd_barang', $kodeBarang)->count_all_results($this->batchTable);
+    }
+
+    public function get_batch_history_lifo($kodeBarang, $limit = null, $offset = 0)
+    {
+        if (!$this->schema_ready()) { return array(); }
+        $query = $this->batch_list_query($kodeBarang)
+            ->order_by("CASE WHEN lb.status_batch = 'AKTIF' THEN 0 ELSE 1 END", 'ASC', false)
+            ->order_by('lb.tgl_efektif', 'DESC')->order_by('lb.id_batch', 'DESC');
+        if ($limit !== null) {
+            $query->limit(max(1, (int) $limit), max(0, (int) $offset));
+        }
+        return $query->get()->result();
+    }
+
+    /**
+     * Harga LIFO terakhir adalah harga batch masuk terbaru, termasuk batch
+     * yang sudah habis.  Ini membuat halaman detail tetap dapat menunjukkan
+     * harga terakhir ketika stok item sedang nol.
+     */
+    public function get_latest_price($kodeBarang)
+    {
+        if (!$this->schema_ready()) { return null; }
+        return $this->db->where('kd_barang', $kodeBarang)
+            ->where('status_harga', 'VALID')
+            ->where('harga_satuan >', 0)
+            ->order_by('tgl_efektif', 'DESC')->order_by('id_batch', 'DESC')
+            ->get($this->batchTable, 1)->row();
     }
 
     public function register_incoming_transaction($transactionId, $actor)
@@ -148,6 +186,84 @@ class M_StockLifo extends CI_Model
         return array('success' => true, 'message' => 'Harga batch LIFO berhasil disimpan.');
     }
 
+    /**
+     * Keputusan harga pada modal Purchasing berlaku untuk seluruh batch PO
+     * terkait, termasuk alokasi pengambilan yang sudah tercatat.
+     */
+    public function sync_purchasing_price($detailId, $price, $priceChoice, $actor)
+    {
+        if (!$this->schema_ready()) {
+            return array('success' => false, 'message' => 'Schema LIFO belum tersedia.');
+        }
+
+        $detail = $this->db->where('id_det_po_nk', (int) $detailId)->get('tbpo_detail_po_nk')->row();
+        $priceChoice = strtoupper(trim((string) $priceChoice));
+        $price = $priceChoice === 'PENGAJUAN'
+            ? (float) ($detail ? $detail->hrg_satuan : 0)
+            : (float) $price;
+        $base = $priceChoice === 'PENGAJUAN' ? 'PENGAJUAN' : 'REALISASI';
+        $note = $base === 'REALISASI' ? 'Harga Purchasing (realisasi)' : 'Harga Purchasing (pengajuan)';
+
+        if (!$detail || $price <= 0 || !in_array($priceChoice, array('REALISASI', 'PENGAJUAN'), true)) {
+            return array('success' => false, 'message' => 'Pilihan harga Purchasing tidak valid.');
+        }
+
+        $batches = $this->db->where('id_detail_po_nk', (int) $detailId)
+            ->where('jenis_sumber', 'PO')->get($this->batchTable)->result();
+        if (empty($batches)) {
+            return array('success' => true, 'updated' => 0);
+        }
+
+        $this->db->trans_begin();
+        foreach ($batches as $batch) {
+            if ($this->db->table_exists('tbpo_stock_lifo_harga_log')) {
+                $this->db->insert('tbpo_stock_lifo_harga_log', array(
+                    'id_batch' => $batch->id_batch,
+                    'harga_lama' => $batch->harga_satuan,
+                    'harga_baru' => $price,
+                    'dasar_harga_lama' => $batch->dasar_harga,
+                    'dasar_harga_baru' => $base,
+                    'alasan' => $note,
+                    'kd_user' => $actor,
+                ));
+            }
+            $this->db->where('id_batch', $batch->id_batch)->update($this->batchTable, array(
+                'harga_satuan' => $price,
+                'dasar_harga' => $base,
+                'status_harga' => 'VALID',
+                'catatan_harga' => $note,
+                'dibuat_oleh' => $actor,
+            ));
+            $this->db->where('id_batch', $batch->id_batch)->update('tbpo_stock_lifo_allocation', array(
+                'harga_satuan_snapshot' => $price,
+                'nilai_alokasi' => 'qty_alokasi * ' . $this->db->escape($price),
+            ), false);
+            $this->db->where(array('id_transnk' => $batch->id_transnk_masuk, 'jenis_issue' => 'PERLU_HARGA', 'resolved_at' => null))
+                ->update('tbpo_stock_lifo_rebuild_issue', array('resolved_at' => date('Y-m-d H:i:s'), 'resolved_by' => $actor));
+        }
+
+        if ($this->db->trans_status() === false) {
+            $this->db->trans_rollback();
+            return array('success' => false, 'message' => 'Sinkronisasi harga batch LIFO gagal.');
+        }
+        $this->db->trans_commit();
+        return array('success' => true, 'updated' => count($batches));
+    }
+
+    private function batch_list_query($kodeBarang)
+    {
+        $this->db->select('lb.*');
+        if ($this->db->table_exists('tbpo_realisasi_detail_po_nk')) {
+            $this->db->select('COALESCE(NULLIF(r.harga_nyata, 0), NULLIF(d.hrg_nyata, 0)) AS harga_purchasing', false);
+            $this->db->join('tbpo_detail_po_nk d', 'd.id_det_po_nk=lb.id_detail_po_nk', 'left');
+            $this->db->join('tbpo_realisasi_detail_po_nk r', 'r.id_det_po_nk=lb.id_detail_po_nk', 'left');
+        } else {
+            $this->db->select('NULL AS harga_purchasing', false);
+        }
+        $this->db->select("CASE lb.dasar_harga WHEN 'REALISASI' THEN 'Realisasi' WHEN 'PENGAJUAN' THEN 'Pengajuan' WHEN 'MANUAL' THEN 'Manual' ELSE 'Belum Harga' END AS label_dasar_harga", false);
+        return $this->db->from($this->batchTable . ' lb')->where('lb.kd_barang', $kodeBarang);
+    }
+
     private function transactions_for_rebuild()
     {
         $effective = "CASE
@@ -203,24 +319,31 @@ class M_StockLifo extends CI_Model
     private function po_price_for_transaction($transaction)
     {
         $hasRealisasi = $this->db->table_exists('tbpo_realisasi_detail_po_nk');
+        $hasPilihan = $hasRealisasi && $this->db->field_exists('harga_dipakai_lifo', 'tbpo_realisasi_detail_po_nk');
         $realisasiSelect = $hasRealisasi
-            ? 'r.harga_nyata AS harga_realisasi,r.status_approval_harga'
-            : '0 AS harga_realisasi,\'\' AS status_approval_harga';
+            ? 'r.harga_nyata AS harga_realisasi' . ($hasPilihan ? ', r.harga_dipakai_lifo' : ', "REALISASI" AS harga_dipakai_lifo')
+            : '0 AS harga_realisasi, "REALISASI" AS harga_dipakai_lifo';
         $realisasiJoin = $hasRealisasi
             ? 'LEFT JOIN tbpo_realisasi_detail_po_nk r ON r.id_det_po_nk=d.id_det_po_nk'
             : '';
-        $detail = $this->db->query("SELECT d.id_det_po_nk,d.hrg_satuan,d.hrg_nyata,p.status,{$realisasiSelect}
+        $detail = $this->db->query("SELECT d.id_det_po_nk,d.hrg_satuan,d.hrg_nyata,{$realisasiSelect}
             FROM tbpo_detail_po_nk d JOIN tbpo_po_nk p ON p.kd_po_nk=d.kd_po_nk
             {$realisasiJoin}
             WHERE d.kd_po_nk=? AND (d.kd_bsys=? OR d.kd_barang=?)
             ORDER BY d.id_det_po_nk DESC LIMIT 1", array($transaction->kd_po_nk, $transaction->kd_barangsys, $transaction->kd_barang))->row();
         if (!$detail) { return null; }
-        $approved = in_array((string) $detail->status_approval_harga, array('DISETUJUI_OTOMATIS', 'DISETUJUI_DIREKTUR'), true);
-        if ($approved && (float) $detail->harga_realisasi > 0) {
+
+        // Harga nyata yang sudah direkam Purchasing adalah harga pembelian
+        // terakhir untuk LIFO, tanpa menunggu perubahan status PO/approval.
+        // Bila belum ada, gunakan harga satuan pada detail PO: harga yang
+        // sebelumnya diinput Purchasing dari pengajuan PIC.
+        if ($detail->harga_dipakai_lifo === 'PENGAJUAN' && (float) $detail->hrg_satuan > 0) {
+            return array('id_detail_po_nk' => $detail->id_det_po_nk, 'harga' => $detail->hrg_satuan, 'dasar' => 'PENGAJUAN');
+        }
+        if ((float) $detail->harga_realisasi > 0) {
             return array('id_detail_po_nk' => $detail->id_det_po_nk, 'harga' => $detail->harga_realisasi, 'dasar' => 'REALISASI');
         }
-        // Sistem lama tidak memiliki detail approval per item. Harga nyata PO DONE diperlakukan final.
-        if ((string) $detail->status === 'DONE' && (float) $detail->hrg_nyata > 0) {
+        if ((float) $detail->hrg_nyata > 0) {
             return array('id_detail_po_nk' => $detail->id_det_po_nk, 'harga' => $detail->hrg_nyata, 'dasar' => 'REALISASI');
         }
         if ((float) $detail->hrg_satuan > 0) {

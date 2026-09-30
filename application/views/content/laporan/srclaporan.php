@@ -64,6 +64,10 @@
                                     <td>Qty</td>
                                     <td>Harga Satuan</td>
                                     <td>Total Harga</td>
+                                    <td>Harga Edit Purchasing</td>
+                                    <td>Harga Referensi LIFO</td>
+                                    <td>Referensi Pembelian</td>
+                                    <td>Tanggal Pembelian</td>
                                 </tr>
                             </thead>
                             <tbody>
@@ -80,6 +84,10 @@
                                         <td><?= $v->qty ?></td>
                                         <td>Rp. <?= number_format($v->hrg_satuan) ?></td>
                                         <td>Rp. <?= number_format($v->total_harga) ?></td>
+                                        <td>Rp. <?= number_format($v->harga_edit_purchasing) ?></td>
+                                        <td><?= $v->harga_referensi_lifo !== null ? 'Rp. ' . number_format($v->harga_referensi_lifo) : '-' ?></td>
+                                        <td><?= $v->referensi_pembelian_lifo ?: '-' ?></td>
+                                        <td><?= $v->tanggal_pembelian_lifo ?: '-' ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>

@@ -18,21 +18,41 @@ class M_Stocknonkomersil  extends CI_Model
 
     private function stock_base_sql()
     {
-        $hasLifo = $this->db->table_exists('tbpo_stock_lifo_batch');
+        $hasLifo = $this->stockLifoView && $this->db->table_exists('tbpo_stock_lifo_batch_nk');
+        // Keep the AJAX row schema stable even when the LIFO view is not
+        // available for the current user.  A browser with a cached DataTables
+        // configuration can still request these properties; omitting them
+        // causes "Requested unknown parameter" and prevents the stock table
+        // from rendering.
         $lifoSelect = $hasLifo ? ",
             COALESCE(lifo.batch_aktif, 0) AS batch_lifo_aktif,
             COALESCE(lifo.qty_perlu_harga, 0) AS qty_lifo_perlu_harga,
             COALESCE(lifo.nilai_lifo, 0) AS nilai_lifo,
-            (SELECT lb.harga_satuan FROM tbpo_stock_lifo_batch lb
+            (SELECT lb.harga_satuan FROM tbpo_stock_lifo_batch_nk lb
                 WHERE lb.kd_barang=a.kd_barang AND lb.status_batch='AKTIF' AND lb.status_harga='VALID' AND lb.qty_sisa > 0
-                ORDER BY lb.tgl_efektif DESC, lb.id_batch DESC LIMIT 1) AS harga_lifo_aktif" : ", 0 AS batch_lifo_aktif, 0 AS qty_lifo_perlu_harga, 0 AS nilai_lifo, NULL AS harga_lifo_aktif";
+                ORDER BY lb.tgl_efektif DESC, lb.id_batch DESC LIMIT 1) AS harga_lifo_aktif"
+            : ', 0 AS batch_lifo_aktif, 0 AS qty_lifo_perlu_harga, 0 AS nilai_lifo, NULL AS harga_lifo_aktif';
         $lifoJoin = $hasLifo ? " LEFT JOIN (
             SELECT kd_barang,
                 SUM(CASE WHEN status_batch='AKTIF' AND qty_sisa > 0 THEN 1 ELSE 0 END) AS batch_aktif,
                 SUM(CASE WHEN status_batch='AKTIF' AND status_harga='PERLU_HARGA' THEN qty_sisa ELSE 0 END) AS qty_perlu_harga,
                 SUM(CASE WHEN status_batch='AKTIF' AND status_harga='VALID' THEN qty_sisa * harga_satuan ELSE 0 END) AS nilai_lifo
-            FROM tbpo_stock_lifo_batch GROUP BY kd_barang
+            FROM tbpo_stock_lifo_batch_nk GROUP BY kd_barang
         ) lifo ON lifo.kd_barang=a.kd_barang" : '';
+        $hasRealisasi = $this->db->table_exists('tbpo_realisasi_detail_po_nk');
+        $hargaNyata = $hasRealisasi
+            ? 'COALESCE(NULLIF(r.harga_nyata, 0), NULLIF(d.hrg_nyata, 0))'
+            : 'NULLIF(d.hrg_nyata, 0)';
+        $realisasiJoin = $hasRealisasi
+            ? 'LEFT JOIN tbpo_realisasi_detail_po_nk r ON r.id_det_po_nk=d.id_det_po_nk'
+            : '';
+        $hargaTerakhirPembelian = "(SELECT CASE WHEN {$hargaNyata} IS NOT NULL THEN {$hargaNyata} ELSE d.hrg_satuan END
+            FROM tbpo_detail_po_nk d
+            LEFT JOIN tbpo_po_nk p ON p.kd_po_nk=d.kd_po_nk
+            {$realisasiJoin}
+            WHERE (d.kd_bsys=a.kd_br_adm OR d.kd_barang=a.kd_barang)
+              AND ({$hargaNyata} IS NOT NULL OR d.hrg_satuan > 0)
+            ORDER BY p.tgl_transaksi DESC, d.id_det_po_nk DESC LIMIT 1)";
         return "SELECT
             a.kd_barang AS kode_barangs,
             a.kd_br_adm AS kode_barang,
@@ -48,6 +68,7 @@ class M_Stocknonkomersil  extends CI_Model
             a.kat_barang,
             a.kd_lokasi AS id_lokasi,
             l.nama_lokasi,
+            {$hargaTerakhirPembelian} AS harga_terakhir_pembelian,
             COALESCE(a.minimum_stock, 0) AS minimum_stock,
             CASE
                 WHEN COALESCE(a.minimum_stock, 0) > 0 THEN GREATEST(COALESCE(a.minimum_stock, 0) - (COALESCE(tr.qty_in, 0) - COALESCE(tr.qty_out, 0)), 0)
@@ -112,22 +133,24 @@ class M_Stocknonkomersil  extends CI_Model
             1 => 'stock.nama_barang',
             2 => 'stock.deskripsi',
             3 => 'stock.qty_ready',
-            4 => 'stock.batch_lifo_aktif',
-            5 => 'stock.harga_lifo_aktif',
-            6 => 'stock.nilai_lifo',
-            7 => 'stock.qty_lifo_perlu_harga',
-            8 => 'stock.minimum_stock',
-            9 => 'stock.qty_saran_po',
-            10 => 'stock.status_stock',
-            11 => 'stock.satuan',
-            12 => 'stock.nama_lokasi'
+            4 => 'stock.harga_terakhir_pembelian',
+            5 => 'stock.qty_lifo_perlu_harga',
+            6 => 'stock.minimum_stock',
+            7 => 'stock.status_stock',
+            8 => 'stock.satuan',
+            9 => 'stock.nama_lokasi'
         ];
-        // Tampilan tanpa otorisasi nominal tidak mengirim kolom LIFO ke DataTables.
         if (empty($this->stockLifoView)) {
             $columns = [
-                0 => 'stock.kode_barang', 1 => 'stock.nama_barang', 2 => 'stock.deskripsi',
-                3 => 'stock.qty_ready', 4 => 'stock.minimum_stock', 5 => 'stock.qty_saran_po',
-                6 => 'stock.status_stock', 7 => 'stock.satuan', 8 => 'stock.nama_lokasi'
+                0 => 'stock.kode_barang',
+                1 => 'stock.nama_barang',
+                2 => 'stock.deskripsi',
+                3 => 'stock.qty_ready',
+                4 => 'stock.harga_terakhir_pembelian',
+                5 => 'stock.minimum_stock',
+                6 => 'stock.status_stock',
+                7 => 'stock.satuan',
+                8 => 'stock.nama_lokasi'
             ];
         }
 
@@ -247,9 +270,9 @@ class M_Stocknonkomersil  extends CI_Model
         return $this->db->query("SELECT * 
             FROM tbpo_req_masterbarang a
             JOIN tbpo_satuan b ON b.id_satuan = a.satuan
-            JOIN tbpo_user c ON c.kode_user = a.req_by
-            WHERE a.req_by = '$lv'
-        ");
+            JOIN tbpo_user c ON c.kode_user COLLATE utf8mb4_general_ci = a.req_by COLLATE utf8mb4_general_ci
+            WHERE a.req_by = ?
+        ", array($lv));
     }
 
     public function getSatuan()
@@ -471,37 +494,42 @@ class M_Stocknonkomersil  extends CI_Model
         WHERE a.id_transnk = '$id'
         ");
     }
-    public function get_detail_transaksi_itm_date($tgl1, $tgl2, $kd)
+    public function get_detail_transaksi_itm_date($tgl1, $tgl2, $kd, $limit = null, $offset = 0)
     {
-        return $this->db->query("SELECT
-        a.id_transnk AS id,
-        a.kd_po_nk AS kd_transaksi,
-        a.kd_akun AS kd_akun,
-        a.tgl_transaksi AS tgl_transaksi,
-        a.tr_qty AS qty,
-        b.nm_satuan AS nm_satuan,
-        a.kd_barangsys AS kd_barang,
-        a.kd_barang AS kd_barangs,
-        f.nama_user AS inpt,
-        f.aksess_lv AS lvadm,
-        e.aksess_lv AS lvusr,
-        e.nama_user AS nmreq,
-        e.departement AS dep,
-        a.keterangan as ket
-        FROM tbpo_transaksi a 
-        JOIN tbpo_satuan b ON b.id_satuan = a.satuan
-        LEFT JOIN tbpo_req_nk c ON c.kd_po_nk = a.kd_po_nk 
-        LEFT JOIN tbpo_po_nk d ON d.kd_po_nk = a.kd_po_nk
-        LEFT JOIN tbpo_user e ON e.kode_user = a.req_by
-        LEFT JOIN tbpo_user f ON f.kode_user = a.inputer
-        WHERE a.tgl_transaksi BETWEEN '$tgl1' AND '$tgl2'
-        AND a.kd_barang = '$kd'
-        ORDER BY a.id_transnk DESC
-        ");
+        return $this->get_detail_transaksi_itm($kd, $limit, $offset, $tgl1, $tgl2);
     }
 
-    public function get_detail_transaksi_itm($kd)
+    public function count_detail_transaksi_itm($kd, $tgl1 = null, $tgl2 = null)
     {
+        $this->db->from('tbpo_transaksi');
+        $this->db->where('kd_barang', $kd);
+        if ($tgl1 !== null && $tgl2 !== null) {
+            $this->db->where('tgl_transaksi >=', $tgl1);
+            $this->db->where('tgl_transaksi <=', $tgl2);
+        }
+
+        return (int) $this->db->count_all_results();
+    }
+
+    public function get_detail_transaksi_itm($kd, $limit = null, $offset = 0, $tgl1 = null, $tgl2 = null)
+    {
+        $lifoSelect = ($this->db->table_exists('tbpo_stock_lifo_allocation') && $this->db->table_exists('tbpo_stock_lifo_batch_nk'))
+            ? ",(SELECT CASE WHEN SUM(la.qty_alokasi) > 0 THEN SUM(la.nilai_alokasi) / SUM(la.qty_alokasi) ELSE NULL END FROM tbpo_stock_lifo_allocation la WHERE la.id_transnk_keluar=a.id_transnk) AS nominal_lifo
+        ,(SELECT GROUP_CONCAT(CONCAT(lb.referensi_sumber, ' (qty ', la.qty_alokasi, ')') SEPARATOR '; ') FROM tbpo_stock_lifo_allocation la JOIN tbpo_stock_lifo_batch_nk lb ON lb.id_batch=la.id_batch WHERE la.id_transnk_keluar=a.id_transnk) AS batch_lifo"
+            : ',NULL AS nominal_lifo, NULL AS batch_lifo';
+        $date_filter = '';
+        $params = array($kd);
+        if ($tgl1 !== null && $tgl2 !== null) {
+            $date_filter = ' AND a.tgl_transaksi BETWEEN ? AND ?';
+            $params[] = $tgl1;
+            $params[] = $tgl2;
+        }
+
+        $limit_filter = '';
+        if ($limit !== null) {
+            $limit_filter = ' LIMIT ' . (int) $limit . ' OFFSET ' . max(0, (int) $offset);
+        }
+
         return $this->db->query("SELECT
         a.id_transnk AS id,
         a.kd_po_nk AS kd_transaksi,
@@ -516,16 +544,33 @@ class M_Stocknonkomersil  extends CI_Model
         e.aksess_lv AS lvusr,
         e.nama_user AS nmreq,
         e.departement AS dep,
-        a.keterangan as ket
+        a.keterangan as ket,
+        CASE
+            WHEN d.kd_po_nk IS NOT NULL THEN 'PEMBELIAN'
+            WHEN c.kd_po_nk IS NOT NULL THEN 'PENGAMBILAN'
+            ELSE ''
+        END AS tipe_referensi,
+        CASE
+            WHEN d.kd_po_nk IS NOT NULL THEN d.kd_po_nk
+            WHEN c.kd_po_nk IS NOT NULL THEN c.kd_po_nk
+            ELSE a.kd_po_nk
+        END AS kode_referensi
+        {$lifoSelect}
         FROM tbpo_transaksi a 
         JOIN tbpo_satuan b ON b.id_satuan = a.satuan
-        LEFT JOIN tbpo_req_nk c ON c.kd_po_nk = a.kd_po_nk 
-        LEFT JOIN tbpo_po_nk d ON d.kd_po_nk = a.kd_po_nk
-        LEFT JOIN tbpo_user e ON e.kode_user = a.req_by
-        LEFT JOIN tbpo_user f ON f.kode_user = a.inputer
-        WHERE a.kd_barang = '$kd'
+        /*
+         * Legacy tables on production were imported with
+         * utf8mb4_general_ci while newer tables use utf8mb4_uca1400_ai_ci.
+         * Explicitly using the legacy collation at each string join keeps
+         * this history query working until the schema is normalized.
+         */
+        LEFT JOIN tbpo_req_nk c ON c.kd_po_nk COLLATE utf8mb4_general_ci = a.kd_po_nk COLLATE utf8mb4_general_ci
+        LEFT JOIN tbpo_po_nk d ON d.kd_po_nk COLLATE utf8mb4_general_ci = a.kd_po_nk COLLATE utf8mb4_general_ci
+        LEFT JOIN tbpo_user e ON e.kode_user COLLATE utf8mb4_general_ci = a.req_by COLLATE utf8mb4_general_ci
+        LEFT JOIN tbpo_user f ON f.kode_user COLLATE utf8mb4_general_ci = a.inputer COLLATE utf8mb4_general_ci
+        WHERE a.kd_barang = ?{$date_filter}
         ORDER BY a.id_transnk DESC
-        ");
+        {$limit_filter}", $params);
     }
     public function qtyready($kd)
     {
@@ -628,9 +673,10 @@ class M_Stocknonkomersil  extends CI_Model
         b.departement AS departemen,
         b.nama_user AS nm_user
         FROM tbpo_transaksi_trashbin a
-        JOIN tbpo_user b ON b.kode_user = a.req_by 
-        WHERE a.kd_barang = '$kd'
-         ");
+        /* tbpo_transaksi_trashbin and tbpo_user use different production collations. */
+        JOIN tbpo_user b ON b.kode_user COLLATE utf8mb4_general_ci = a.req_by COLLATE utf8mb4_general_ci
+        WHERE a.kd_barang = ?
+         ", array($kd));
     }
     public function delete_trash($id)
     {
@@ -653,7 +699,12 @@ class M_Stocknonkomersil  extends CI_Model
         $this->db->select('a.kd_akun AS jn_transaksi, a.tgl_transaksi, c.departement, c.nama_user, b.nama_barang, a.keterangan, a.tr_qty AS qty');
         $this->db->from('tbpo_transaksi a');
         $this->db->join('tbpo_barang_nk b', 'b.kd_barang = a.kd_barang');
-        $this->db->join('tbpo_user c', 'c.kode_user = a.req_by');
+        $this->db->join(
+            'tbpo_user c',
+            'c.kode_user COLLATE utf8mb4_general_ci = a.req_by COLLATE utf8mb4_general_ci',
+            '',
+            false
+        );
         $this->db->where('a.tgl_transaksi >=', $tgl1);
         $this->db->where('a.tgl_transaksi <=', $tgl2);
         $query = $this->db->get();

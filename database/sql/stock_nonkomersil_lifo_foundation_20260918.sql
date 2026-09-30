@@ -4,7 +4,7 @@
 
 SET NAMES utf8mb4;
 
-CREATE TABLE IF NOT EXISTS `tbpo_stock_lifo_batch` (
+CREATE TABLE IF NOT EXISTS `tbpo_stock_lifo_batch_nk` (
   `id_batch` bigint unsigned NOT NULL AUTO_INCREMENT,
   `id_transnk_masuk` int(11) NOT NULL,
   `id_detail_po_nk` int(11) DEFAULT NULL,

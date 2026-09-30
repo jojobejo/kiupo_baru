@@ -6,14 +6,28 @@ defined('BASEPATH') or exit('No direct script access allowed');
  *
  * PHPExcel cannot be parsed by PHP 8 because it uses the removed curly-brace
  * string-offset syntax. PhpSpreadsheet is its maintained successor. The
- * aliases keep the existing report code readable while all runtime classes
- * are supplied by PhpSpreadsheet.
+ * application is still served by PHP 7.3 in some XAMPP installations, while
+ * the Composer PhpSpreadsheet dependency requires PHP 8.2+. Select the
+ * implementation that the running PHP version can actually parse.
  */
 class PhpSpreadsheetBootstrap
 {
     public static function load()
     {
         if (class_exists('PHPExcel', false)) {
+            return;
+        }
+
+        // PhpSpreadsheet 5.x uses typed properties and private constants,
+        // which cause a ParseError before it can run on PHP 7.3.
+        if (version_compare(PHP_VERSION, '8.2.0', '<')) {
+            $legacyPHPExcel = APPPATH . 'third_party/PHPExcel/PHPExcel.php';
+            if (!is_file($legacyPHPExcel)) {
+                show_error('PHP 7.3 memerlukan library PHPExcel legacy untuk ekspor Excel. Perbarui PHP ke 8.2+ atau pulihkan application/third_party/PHPExcel.', 500);
+                return;
+            }
+
+            require_once $legacyPHPExcel;
             return;
         }
 

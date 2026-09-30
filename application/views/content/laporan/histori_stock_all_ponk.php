@@ -19,6 +19,15 @@
                             </div>
                             <div class="col-sm-6">
                                 <div class="form-group">
+                                    <label>Jenis Histori:</label>
+                                    <select class="form-control" name="jenis_transaksi" id="jenis_transaksi">
+                                        <option value="SEMUA">Semua transaksi</option>
+                                        <option value="PENGAMBILAN">Pengambilan barang saja</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="form-group">
                                     <label>Tanggal End :</label>
                                     <input type="date" class="form-control" name="tglend" id="tglend">
                                 </div>
@@ -42,22 +51,27 @@
                     <div class="col mt-2">
 
                     </div>
-                    <table id="tabel-stock" class="table table-bordered table-striped">
+                    <div class="table-responsive">
+                    <table id="tabel-stock" class="table table-bordered table-striped w-100">
                         <thead>
                             <tr class="bg-secondary text-white">
                                 <th>#</th>
                                 <th>Tanggal Transaksi</th>
+                                <th>PIC</th>
                                 <th>Departemen</th>
                                 <th>Nama Barang</th>
                                 <th>Keterangan</th>
                                 <th>Qty</th>
                                 <th>Jenis Transaksi</th>
+                                <th>Nominal Satuan</th>
+                                <th>Batch / Referensi LIFO</th>
                             </tr>
                         </thead>
                         <tbody>
                             <!-- kosong saat load awal -->
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>

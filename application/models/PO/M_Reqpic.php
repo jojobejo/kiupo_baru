@@ -247,6 +247,8 @@ class M_Reqpic extends CI_Model
             a.id_det_po_nk AS idbarang,
             a.kd_bsys AS kodebarang,
             a.kd_po_nk AS kodefaktur,
+            a.kd_bsys AS kd_bsys,
+            b.kd_barang AS kd_barang,
             b.nama_barang AS nmbarang,
             b.descnk AS deskripsi,
             a.keterangan AS ket,
@@ -407,7 +409,7 @@ class M_Reqpic extends CI_Model
     {
         return $this->db->query("SELECT a.*
             FROM tbpo_req_nk a
-            WHERE a.status IN ('ON PROGRESS', 'ON PROGRESS - ACC KADEP', 'PO REVISI')
+            WHERE a.status IN ('ON PROGRESS - BELUM ACC', 'ON PROGRESS', 'ON PROGRESS - ACC KADEP', 'PO REVISI')
             ORDER BY a.tgl_transaksi DESC, a.create_at DESC;
             ");
     }
@@ -419,6 +421,7 @@ class M_Reqpic extends CI_Model
         a.nm_user AS nm_user,
         a.departemen AS departemen,
         a.tgl_transaksi AS tgl_transaksi,
+        a.create_at AS create_at,
         a.tj_pembelian AS tj_pembelian,
         a.status AS status,
         COALESCE(b.status,0) AS status_po
@@ -450,6 +453,7 @@ class M_Reqpic extends CI_Model
         a.nm_user AS nm_user,
         a.departemen AS departemen,
         a.tgl_transaksi AS tgl_transaksi,
+        a.create_at AS create_at,
         a.tj_pembelian AS tj_pembelian,
         a.status AS status,
         COALESCE(b.status,0) AS status_po
@@ -470,6 +474,23 @@ class M_Reqpic extends CI_Model
         $this->db->order_by('a.tgl_transaksi', 'DESC');
         $this->db->order_by('a.create_at', 'DESC');
 
+        return $this->db->get();
+    }
+
+    /** Arsip KADEP: request yang sudah diteruskan Purchasing setelah timeout. */
+    public function getlistpicreqkadep_history($departemen, $allDepartments = false)
+    {
+        $timeoutField = $this->db->field_exists('purchasing_timeout_opened_at', 'tbpo_req_nk')
+            ? 'a.purchasing_timeout_opened_at' : 'a.purchasing_opened_at';
+        $this->db->select("a.kd_po_nk, a.nm_user, a.departemen, a.tgl_transaksi, a.status, {$timeoutField} AS purchasing_opened_at, u.nama_user AS nama_purchasing", false);
+        $this->db->from('tbpo_req_nk a');
+        $this->db->join('tbpo_user u', 'u.kode_user = a.acc_with', 'left');
+        $this->db->where($timeoutField . ' IS NOT NULL', null, false);
+        $this->db->where('a.status !=', 'ON PROGRESS - BELUM ACC');
+        if (!$allDepartments) {
+            $this->db->where('a.departemen', $departemen);
+        }
+        $this->db->order_by($timeoutField, 'DESC', false);
         return $this->db->get();
     }
 
@@ -522,6 +543,51 @@ class M_Reqpic extends CI_Model
         return $this->db->get();
     }
 
+    /**
+     * Histori request PIC pada departemen KADEP, beserta PO terakhir yang
+     * dibuat Purchasing. Satu request tetap hanya ditampilkan satu kali.
+     */
+    public function get_pickup_pic_history($departemen, $allDepartments = false)
+    {
+        $latestPurchase = '(SELECT kd_po_req, MAX(id_po_nk) AS latest_id
+            FROM tbpo_po_nk
+            GROUP BY kd_po_req) latest_po';
+
+        $this->db->select('r.kd_po_nk, r.nm_user, r.departemen, r.tgl_transaksi, r.tgl_ambil,
+            r.create_at, r.tj_pembelian, r.jml_item, r.status AS status_request,
+            p.kd_po_nk AS kd_po_pembelian, p.nopo, p.status AS status_pembelian');
+        $this->db->from('tbpo_req_nk r');
+        $this->db->join($latestPurchase, 'latest_po.kd_po_req = r.kd_po_nk', 'left', false);
+        $this->db->join('tbpo_po_nk p', 'p.id_po_nk = latest_po.latest_id', 'left');
+        if (!$allDepartments) {
+            $this->db->where('r.departemen', $departemen);
+        }
+        $this->db->order_by('r.tgl_transaksi', 'DESC');
+        $this->db->order_by('r.create_at', 'DESC');
+        return $this->db->get();
+    }
+
+    /** Detail harga aktual pengambilan, berdasarkan snapshot alokasi LIFO. */
+    public function get_lifo_pickup_details($kdpo)
+    {
+        if (!$this->db->table_exists('tbpo_stock_lifo_allocation') || !$this->db->table_exists('tbpo_stock_lifo_batch_nk')) {
+            return array();
+        }
+        return $this->db->query("SELECT t.id_transnk, t.tgl_transaksi, t.kd_barang, t.kd_barangsys, t.tr_qty,
+            COALESCE(b.nama_barang, t.kd_barang) AS nama_barang,
+            SUM(a.qty_alokasi) AS qty_alokasi,
+            SUM(a.nilai_alokasi) AS nilai_total,
+            CASE WHEN SUM(a.qty_alokasi) > 0 THEN SUM(a.nilai_alokasi) / SUM(a.qty_alokasi) ELSE NULL END AS harga_satuan,
+            GROUP_CONCAT(CONCAT(lb.referensi_sumber, ' | batch ', lb.id_batch, ' | qty ', a.qty_alokasi) ORDER BY a.id_alokasi SEPARATOR '; ') AS keterangan_batch
+            FROM tbpo_transaksi t
+            LEFT JOIN tbpo_stock_lifo_allocation a ON a.id_transnk_keluar=t.id_transnk
+            LEFT JOIN tbpo_stock_lifo_batch_nk lb ON lb.id_batch=a.id_batch
+            LEFT JOIN tbpo_barang_nk b ON b.kd_barang=t.kd_barang
+            WHERE t.kd_po_nk=? AND t.kd_akun='11512'
+            GROUP BY t.id_transnk, t.tgl_transaksi, t.kd_barang, t.kd_barangsys, t.tr_qty, b.nama_barang
+            ORDER BY t.id_transnk DESC", array($kdpo))->result();
+    }
+
     /** Request asal sebuah detail item, dipakai untuk validasi aksi Purchasing. */
     public function get_request_by_detail_id($detailId)
     {
@@ -535,7 +601,8 @@ class M_Reqpic extends CI_Model
     }
 
     /**
-     * Purchasing selalu terkunci hingga KADEP menyetujui request PIC.
+     * KADEP mendapat waktu lima menit untuk memutuskan request baru.
+     * Setelah itu Purchasing dapat memprosesnya walaupun statusnya belum berubah.
      */
     public function can_purchasing_process($request)
     {
@@ -543,7 +610,22 @@ class M_Reqpic extends CI_Model
             return (bool) $request;
         }
 
-        return false;
+        $submittedAt = !empty($request->kadep_submitted_at)
+            ? $request->kadep_submitted_at
+            : (!empty($request->create_at) ? $request->create_at : null);
+
+        if (empty($submittedAt)) {
+            return false;
+        }
+
+        try {
+            $submittedAt = new DateTimeImmutable($submittedAt, new DateTimeZone('Asia/Jakarta'));
+            $availableAt = $submittedAt->modify('+5 minutes');
+            $now = new DateTimeImmutable('now', new DateTimeZone('Asia/Jakarta'));
+            return $now >= $availableAt;
+        } catch (Exception $exception) {
+            return false;
+        }
     }
 
     /** Update hanya bila statusnya masih sesuai agar keputusan ganda tidak menimpa data. */
@@ -587,6 +669,8 @@ class M_Reqpic extends CI_Model
     {
         return $this->db->query("SELECT
         a.kd_po_nk,
+        a.kd_bsys,
+        b.kd_barang,
         b.nama_barang,
         b.descnk,
         a.keterangan,

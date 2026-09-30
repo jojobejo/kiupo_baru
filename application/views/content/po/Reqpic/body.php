@@ -258,7 +258,9 @@
                                         <td><?= format_tgl_lahir($g->tgl_transaksi) ?></td>
                                         <td><?= format_jam_24($g->create_at) ?></td>
                                         <td><?= $g->tj_pembelian ?></td>
-                                        <?php if ($g->status == 'ON PROGRESS - ACC KADEP') : ?>
+                                        <?php if ($g->status == 'ON PROGRESS - BELUM ACC') : ?>
+                                            <td><a class="btn btn-block btn-warning btn-sm"><b>ON PROGRESS - BELUM ACC KADEP</b></a></td>
+                                        <?php elseif ($g->status == 'ON PROGRESS - ACC KADEP') : ?>
                                             <td><a class="btn btn-block btn-primary btn-sm"><b>ON PROGRESS - ACC KADEP</b></a></td>
                                         <?php elseif ($g->status == 'ON PROGRESS') : ?>
                                             <td><a class="btn btn-block btn-warning btn-sm"><b><?= $g->status ?></b></a></td>
