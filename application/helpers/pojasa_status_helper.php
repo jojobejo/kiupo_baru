@@ -60,7 +60,11 @@ function pojasa_next_status($currentStatus, $action, $departemen, $dirutOpsAppro
         'DRAFT' => array('SUBMIT' => 'MENUNGGU_PURCHASING_AWAL'),
         'MENUNGGU_PURCHASING_AWAL' => array('UPDATE' => 'MENUNGGU_KONFIRMASI_PIC'),
         'MENUNGGU_KONFIRMASI_PIC' => array(
-            'ACC' => 'MENUNGGU_PURCHASING',
+            // Purchasing has completed its sole business review before the
+            // PIC confirmation.  An accepted confirmation must therefore
+            // go straight to the department head; returning it to Purchasing
+            // here creates an approval loop and leaves KADEP unreachable.
+            'ACC' => 'MENUNGGU_KADEP',
             'REVISI' => 'REVISI_PIC',
         ),
         'MENUNGGU_KADEP' => array(

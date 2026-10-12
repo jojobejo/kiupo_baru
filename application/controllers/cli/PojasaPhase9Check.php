@@ -47,9 +47,10 @@ class PojasaPhase9Check extends CI_Controller
             $this->approve($users['kadep'], $code, 'ACC'),
             $this->approve($users['dirops'], $code, 'ACC'),
             $this->approve($users['director'], $code, 'ACC'),
+            $this->approve($users['purchasing'], $code, 'TERBITKAN'),
         );
         $expected = array('MENUNGGU_KONFIRMASI_PIC', 'MENUNGGU_KADEP', 'MENUNGGU_DIRUT_OPS',
-            'MENUNGGU_DIREKTUR', 'SPK_TERBIT');
+            'MENUNGGU_DIREKTUR', 'MENUNGGU_PENERBITAN_PURCHASING', 'SPK_TERBIT');
         $actual = array_map(function ($step) { return isset($step['status']) ? $step['status'] : null; }, $steps);
         $this->assert('mandatory_sequential_statuses', $actual === $expected, array('expected' => $expected, 'actual' => $actual));
 
@@ -57,15 +58,15 @@ class PojasaPhase9Check extends CI_Controller
         $spk = $this->db->get_where('tbpo_jasa_spk', array('kd_po_jasa' => $code))->row();
         $submission = $this->db->get_where('tbpo_jasa_purchase_submission', array('kd_po_jasa' => $code))->row();
         $legacyPo = $submission ? $this->db->get_where('tbpo_po_nk', array('id_po_nk' => $submission->id_po_nk))->row() : null;
-        $this->assert('director_issues_spk', $request && $request->status === 'SPK_TERBIT' && $spk && $request->no_spk === $spk->no_spk);
-        $this->assert('director_automatically_creates_purchase_order', $submission && $legacyPo
+        $this->assert('purchasing_issues_spk_after_director_approval', $request && $request->status === 'SPK_TERBIT' && $spk && $request->no_spk === $spk->no_spk);
+        $this->assert('purchasing_creates_purchase_order_after_director_approval', $submission && $legacyPo
             && $legacyPo->status === 'PROSES PEMBELIAN' && $legacyPo->source_module === 'PO_JASA');
 
         $history = $this->db->select('approval_stage')->order_by('id_approval', 'ASC')
             ->get_where('tbpo_jasa_approval', array('kd_po_jasa' => $code))->result_array();
         $stages = array_map(function ($row) { return $row['approval_stage']; }, $history);
         $this->assert('approval_history_matches_business_roles', $stages === array(
-            'PURCHASING', 'PIC', 'KADEP', 'DIREKTUR_OPERASIONAL', 'DIREKTUR',
+            'PURCHASING', 'PIC', 'KADEP', 'DIREKTUR_OPERASIONAL', 'DIREKTUR', 'PURCHASING',
         ), $stages);
         $picNotif = (int) $this->db->where(array('kd_po_jasa' => $code,
             'recipient_user_id' => $users['pic']['id_user'], 'event_type' => 'MENUNGGU_KONFIRMASI_PIC'))
