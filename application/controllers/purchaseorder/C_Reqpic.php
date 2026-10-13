@@ -1069,6 +1069,9 @@ class C_Reqpic extends CI_Controller
             $data['purchasingCanProcess'] = $this->M_Reqpic->can_purchasing_process(
                 $this->M_Reqpic->getrequestrow($kdpo)
             );
+            $data['purchasingCanProcessPickup'] = $this->M_Reqpic->can_purchasing_process_pickup(
+                $this->M_Reqpic->getrequestrow($kdpo)
+            );
 
             $this->load->view('partial/header', $data);
             $this->load->view('partial/sidebar');
@@ -1936,7 +1939,9 @@ class C_Reqpic extends CI_Controller
         $decision = strtoupper((string) $this->input->post('decision', true));
         $note = trim((string) $this->input->post('note', true));
         $request = $this->M_Reqpic->getrequestrow($kdponk);
-        if (!$request || trim((string) $request->status) !== 'MENUNGGU ACC PENGAMBILAN'
+        $currentStatus = $request ? trim((string) $request->status) : '';
+        $validPickupStatuses = array('MENUNGGU ACC PENGAMBILAN', 'BARANG TERSEDIA');
+        if (!$request || !in_array($currentStatus, $validPickupStatuses, true)
             || (!is_super_admin() && $request->departemen !== $this->session->userdata('departemen'))
             || !in_array($decision, array('ACC', 'TOLAK'), true)
             || ($decision === 'TOLAK' && $note === '')) {
@@ -1949,8 +1954,15 @@ class C_Reqpic extends CI_Controller
         $this->db->trans_begin();
         $updated = $this->M_Reqpic->update_request_status_if_current(
             $kdponk,
-            'MENUNGGU ACC PENGAMBILAN',
-            $approved ? array('status' => 'MENUNGGU PENYERAHAN BARANG', 'acc_with' => $this->session->userdata('kode')) : array('status' => 'BARANG TERSEDIA')
+            $currentStatus,
+            $approved
+                ? array('status' => 'MENUNGGU PENYERAHAN BARANG', 'acc_with' => $this->session->userdata('kode'))
+                : array(
+                    'status' => 'BARANG TERSEDIA',
+                    'acc_with' => $currentStatus === 'BARANG TERSEDIA'
+                        ? $this->session->userdata('kode')
+                        : $request->acc_with,
+                )
         );
         if (!$updated) {
             $this->db->trans_rollback();
@@ -1978,6 +1990,51 @@ class C_Reqpic extends CI_Controller
                 : 'Pengambilan ditolak. Request dikembalikan ke status BARANG TERSEDIA.');
         }
         redirect('reqpicpickupapproval');
+    }
+
+    /** Purchasing meneruskan otomatis setelah KADEP tidak merespons selama lima menit. */
+    public function process_pickup_after_kadep_timeout()
+    {
+        if ((string) $this->session->userdata('lv') !== '2' && !is_super_admin()) {
+            show_404();
+            return;
+        }
+
+        $kdponk = $this->input->post('kdponk', true);
+        $request = $this->M_Reqpic->getrequestrow($kdponk);
+        if (!$this->M_Reqpic->can_purchasing_process_pickup($request)) {
+            $this->session->set_flashdata('error', 'Batas lima menit sejak catatan barang diterima belum terpenuhi atau status sudah berubah.');
+            redirect('reqpic/detreqbarangpic/' . rawurlencode($kdponk));
+            return;
+        }
+
+        $currentStatus = trim((string) $request->status);
+        $this->db->trans_begin();
+        $updated = $this->M_Reqpic->update_request_status_if_current($kdponk, $currentStatus, array(
+            'status' => 'MENUNGGU PENYERAHAN BARANG',
+        ));
+        if (!$updated) {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('error', 'Status pengambilan telah berubah. Silakan muat ulang halaman.');
+            redirect('reqpic/detreqbarangpic/' . rawurlencode($kdponk));
+            return;
+        }
+        $this->M_Purchase->addNote(array(
+            'kd_po' => $kdponk,
+            'isi_note' => 'PURCHASING MENERUSKAN PENGAMBILAN SETELAH 5 MENIT TANPA UPDATE KADEP',
+            'kd_user' => $this->session->userdata('kode'),
+            'nama_user' => $this->session->userdata('nama_user'),
+            'note_for' => '2',
+            'update_status' => '2',
+        ));
+        if ($this->db->trans_status() === FALSE) {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('error', 'Pengajuan pengambilan gagal diteruskan.');
+        } else {
+            $this->db->trans_commit();
+            $this->session->set_flashdata('success', 'Batas lima menit terlewati. Pengambilan diteruskan ke Purchasing untuk penyerahan barang.');
+        }
+        redirect('reqpic/detreqbarangpic/' . rawurlencode($kdponk));
     }
 
     /** Kompatibilitas URL lama; pengajuan kini dilakukan oleh PIC. */

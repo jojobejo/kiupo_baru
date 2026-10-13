@@ -533,13 +533,37 @@ class M_Reqpic extends CI_Model
     /** Permohonan pengambilan yang menunggu keputusan KADEP. */
     public function get_pickup_approval_waiting_kadep($departemen, $allDepartments = false)
     {
-        $this->db->from('tbpo_req_nk');
-        $this->db->where('status', 'MENUNGGU ACC PENGAMBILAN');
+        $this->db->from('tbpo_req_nk r');
+        $this->db->where("(
+            TRIM(r.status) = 'MENUNGGU ACC PENGAMBILAN'
+            OR (
+                TRIM(r.status) = 'BARANG TERSEDIA'
+                AND EXISTS (
+                    SELECT 1 FROM tbpo_note_direktur received
+                    WHERE received.kd_po = r.kd_po_nk
+                      AND received.note_for = '2'
+                      AND received.isi_note = 'BARANG DI TERIMA - ADMIN'
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM tbpo_note_direktur rejected
+                    WHERE rejected.kd_po = r.kd_po_nk
+                      AND rejected.note_for = '2'
+                      AND rejected.isi_note LIKE 'PENGAJUAN PENGAMBILAN BARANG DITOLAK KADEP:%'
+                      AND rejected.log_create >= (
+                          SELECT MAX(received_again.log_create)
+                          FROM tbpo_note_direktur received_again
+                          WHERE received_again.kd_po = r.kd_po_nk
+                            AND received_again.note_for = '2'
+                            AND received_again.isi_note = 'BARANG DI TERIMA - ADMIN'
+                      )
+                )
+            )
+        )", null, false);
         if (!$allDepartments) {
-            $this->db->where('departemen', $departemen);
+            $this->db->where('r.departemen', $departemen);
         }
-        $this->db->order_by('tgl_transaksi', 'DESC');
-        $this->db->order_by('create_at', 'DESC');
+        $this->db->order_by('r.tgl_transaksi', 'DESC');
+        $this->db->order_by('r.create_at', 'DESC');
         return $this->db->get();
     }
 
@@ -623,6 +647,37 @@ class M_Reqpic extends CI_Model
             $availableAt = $submittedAt->modify('+5 minutes');
             $now = new DateTimeImmutable('now', new DateTimeZone('Asia/Jakarta'));
             return $now >= $availableAt;
+        } catch (Exception $exception) {
+            return false;
+        }
+    }
+
+    /** Purchasing dapat meneruskan pengambilan jika KADEP belum merespons 5 menit sejak barang diterima. */
+    public function can_purchasing_process_pickup($request)
+    {
+        if (!$request || !in_array(trim((string) $request->status), array(
+            'BARANG TERSEDIA',
+            'MENUNGGU ACC PENGAMBILAN',
+        ), true)) {
+            return false;
+        }
+
+        $approval = $this->db->select('log_create')
+            ->from('tbpo_note_direktur')
+            ->where('kd_po', $request->kd_po_nk)
+            ->where('note_for', '2')
+            ->where('isi_note', 'BARANG DI TERIMA - ADMIN')
+            ->order_by('log_create', 'DESC')
+            ->limit(1)
+            ->get()
+            ->row();
+        if (!$approval || empty($approval->log_create)) {
+            return false;
+        }
+
+        try {
+            $approvedAt = new DateTimeImmutable($approval->log_create, new DateTimeZone('Asia/Jakarta'));
+            return new DateTimeImmutable('now', new DateTimeZone('Asia/Jakarta')) >= $approvedAt->modify('+5 minutes');
         } catch (Exception $exception) {
             return false;
         }

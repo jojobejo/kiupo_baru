@@ -509,6 +509,16 @@
                         <a class="btn btn-block btn-warning btn-sm" href=""><i class="fas fa-exclamation-triangle"></i>&nbsp;<?= $s->status ?>&nbsp;<i class="fas fa-exclamation-triangle"></i></a>
                     <?php elseif ($s->status == 'REQUEST ACC') : ?>
                         <a class="btn btn-block btn-info btn-sm" href=""><i class="fas fa-check-circle"></i>&nbsp;<?= $s->status ?>&nbsp;<i class="fas fa-check-circle"></i></a>
+                    <?php elseif (in_array(trim((string) $s->status), array('BARANG TERSEDIA', 'MENUNGGU ACC PENGAMBILAN'), true)) : ?>
+                        <?php if (!empty($purchasingCanProcessPickup)) : ?>
+                            <div class="alert alert-warning mt-3 mb-2">KADEP belum memberi afirmasi atau mengubah status selama 5 menit sejak catatan BARANG DI TERIMA - ADMIN. Purchasing dapat meneruskan proses penyerahan.</div>
+                            <form method="post" action="<?= base_url('reqpic/pickup-approval/process-timeout') ?>">
+                                <input type="hidden" name="kdponk" value="<?= htmlspecialchars($s->kd_po_nk, ENT_QUOTES, 'UTF-8') ?>">
+                                <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-forward"></i> TERUSKAN PENGAMBILAN KE PROSES PENYERAHAN</button>
+                            </form>
+                        <?php else : ?>
+                            <div class="alert alert-info mt-3 mb-2">Menunggu afirmasi KADEP. Purchasing dapat meneruskan proses setelah 5 menit sejak catatan BARANG DI TERIMA - ADMIN.</div>
+                        <?php endif; ?>
                     <?php else : ?>
                     <?php endif; ?>
 
