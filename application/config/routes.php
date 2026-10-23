@@ -71,6 +71,8 @@ $route['admin-data/update']                             = 'admin/C_AdminData/upd
 //auth
 $route['login']                                         = 'auth/process';
 $route['logout']                                        = 'auth/logout';
+$route['sso/start']                                     = 'auth/sso';
+$route['sso/callback']                                  = 'auth/sso_callback';
 $route['dashboard']                                     = 'dashboard';
 
 //suplier 

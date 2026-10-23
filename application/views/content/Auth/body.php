@@ -7,6 +7,7 @@
         <div class="card">
             <div class="card-body login-card-body">
                 <p class="login-box-msg">Sign in terlebih dahulu</p>
+                <?php if (!empty($show_local_login)) : ?>
                 <form action="<?= base_url('login') ?>" method="post">
                     <div class="input-group mb-3">
                         <input type="text" class="form-control" placeholder="Username" id="user_isi" name="user_isi">
@@ -30,6 +31,13 @@
                         </div>
                     </div>
                 </form>
+                <?php endif; ?>
+                <?php if (!empty($portal_sso_enabled) && !empty($show_local_login)) : ?>
+                    <div class="text-center mt-3 mb-2">atau</div>
+                    <a href="<?= base_url('sso/start') ?>" class="btn btn-outline-primary btn-block">
+                        <i class="fas fa-shield-alt mr-1"></i> Lanjutkan dengan KarismaERP Portal
+                    </a>
+                <?php endif; ?>
                 <?php if ($this->session->flashdata("gagal")) : ?>
                     <div class="alert alert-danger alert-dismissible fade show mt-3" role="alert">
                         <?php echo "<center>" . $this->session->flashdata("gagal") . "</center>" ?>
