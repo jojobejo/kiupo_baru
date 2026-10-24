@@ -4,6 +4,14 @@ defined('BASEPATH') or exit('No direct script access allowed');
 /** KarismaERP Portal authorization-code and PKCE client for KIU PO. */
 class Portal_sso
 {
+    private $lastErrorCode = '';
+
+    /** Mengembalikan kategori kegagalan tanpa membocorkan detail respons atau kredensial. */
+    public function getLastErrorCode()
+    {
+        return $this->lastErrorCode;
+    }
+
     public function createAuthorizationRequest($settings)
     {
         if (!is_array($settings)
@@ -40,6 +48,7 @@ class Portal_sso
 
     public function exchangeCode($settings, $code, $verifier, $expectedState)
     {
+        $this->lastErrorCode = '';
         if (!extension_loaded('curl')
             || !is_array($settings)
             || empty($settings['client_id'])
@@ -87,6 +96,13 @@ class Portal_sso
         curl_close($handle);
 
         if ($responseBody === FALSE || $curlError !== 0 || $httpCode < 200 || $httpCode >= 300) {
+            if (in_array($curlError, array(35, 51, 58, 59, 60, 64, 66, 80, 82, 83, 90, 91), TRUE)) {
+                $this->lastErrorCode = 'tls';
+            } elseif ($curlError !== 0) {
+                $this->lastErrorCode = 'network';
+            } else {
+                $this->lastErrorCode = 'portal_response';
+            }
             return FALSE;
         }
 
@@ -103,6 +119,7 @@ class Portal_sso
             || empty($response['data']['user'])
             || !is_array($response['data']['user'])
         ) {
+            $this->lastErrorCode = 'portal_response';
             return FALSE;
         }
 
@@ -120,6 +137,7 @@ class Portal_sso
             || (int) $user['user_id'] < 1
             || $user['sub'] !== $user['auth_source'] . ':' . (int) $user['user_id']
         ) {
+            $this->lastErrorCode = 'portal_response';
             return FALSE;
         }
 

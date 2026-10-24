@@ -5,5 +5,8 @@
 # CodeIgniter runtime logs
 /application/logs/*.php
 
+# Local KarismaERP Portal client secret; configure server-side and never commit.
+/application/config/portal_sso.local.php
+
 # OS metadata
 .DS_Store

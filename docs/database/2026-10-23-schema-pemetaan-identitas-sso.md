@@ -7,6 +7,8 @@ Integrasi SSO memerlukan penyimpanan relasi stabil antara klaim `sub` KarismaERP
 DDL: `database/sql/portal_sso_identity_20261023.sql`  
 Rollback: `database/sql/portal_sso_identity_rollback_20261023.sql`
 
+**Kebutuhan aktif:** tabel ini wajib ada sebelum SSO diaktifkan di setiap database environment KIU PO. Pembaruan alur SSO tanggal 24 Oktober 2026 yang selalu memeriksa ulang identitas Portal dan membersihkan session lama tidak memerlukan DDL tambahan. Tidak ada perubahan kolom `tbpo_user`.
+
 Kolom `id_user` adalah primary key sekaligus foreign key ke `tbpo_user.id_user`, dengan `ON DELETE RESTRICT`. `external_sub` memakai ASCII binary collation agar perbandingan subject tepat dan peka huruf besar/kecil. Subject unik mencegah satu identitas portal dipakai untuk dua akun KIU PO.
 
 ## Penerapan
@@ -16,7 +18,7 @@ Kolom `id_user` adalah primary key sekaligus foreign key ke `tbpo_user.id_user`,
 3. Verifikasi tabel dan constraint terbentuk sebelum mengaktifkan kredensial SSO pada konfigurasi server.
 4. Lakukan UAT autentikasi dan role aplikasi sebelum rilis.
 
-SQL ini disiapkan sebagai migrasi; belum dijalankan terhadap database lokal maupun production pada perubahan ini. Tidak ada perubahan schema/data database yang telah diterapkan.
+SQL ini telah diterapkan pada database pengembangan lokal `kiucoid_karismaerp_local` pada 24 Oktober 2026 setelah memverifikasi `tbpo_user` menggunakan InnoDB, `id_user` bertipe `int(11)` sebagai primary key, dan berisi 35 akun. Tabel pemetaan baru masih kosong saat penerapan. Migration production belum dijalankan; tidak ada perubahan atau pengubahan data pada `tbpo_user`.
 
 ## Rollback
 

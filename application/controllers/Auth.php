@@ -17,14 +17,20 @@ class Auth extends CI_Controller
 
     function index()
     {
-        if ($this->session->userdata('status') === 'is_login' && $this->session->userdata('id')) {
+        $hasLocalSession = $this->session->userdata('status') === 'is_login'
+            && $this->session->userdata('id');
+        $forceLocalLogin = (string) $this->input->get('local', TRUE) === '1';
+
+        // The Portal launch URL may be opened while another KIU PO account is
+        // still in this browser session. Always re-check the Portal identity.
+        if ($hasLocalSession && (!$this->portalSsoConfigured() || $forceLocalLogin)) {
             redirect('dashboard');
             return;
         }
 
         $data['portal_sso_enabled'] = $this->portalSsoConfigured();
         $showLocalLogin = !$data['portal_sso_enabled']
-            || (string) $this->input->get('local', TRUE) === '1'
+            || $forceLocalLogin
             || (bool) $this->session->flashdata('sso_failure')
             || $this->session->userdata('portal_sso_auto_disabled') === TRUE;
 
@@ -52,16 +58,9 @@ class Auth extends CI_Controller
             return;
         }
 
-        if ($this->session->userdata('status') === 'is_login' && $this->session->userdata('id')) {
-            redirect('dashboard');
-            return;
-        }
-
-        $this->session->unset_userdata('portal_sso_auto_disabled');
-
         $this->load->library('Portal_sso', NULL, 'portal_sso');
         $request = $this->portal_sso->createAuthorizationRequest(
-            $this->config->item('portal_sso')
+            $this->config->item('portal_sso', 'portal_sso')
         );
 
         if ($request === FALSE) {
@@ -69,6 +68,11 @@ class Auth extends CI_Controller
             return;
         }
 
+        // Do not let a previous local account remain usable while the Portal
+        // authenticates another user or rejects this SSO attempt.
+        $this->clearLocalIdentity();
+        $this->session->sess_regenerate(TRUE);
+        $this->session->unset_userdata('portal_sso_auto_disabled');
         $this->session->set_userdata('portal_sso_pending', array(
             'state' => $request['state'],
             'code_verifier' => $request['code_verifier'],
@@ -122,20 +126,27 @@ class Auth extends CI_Controller
 
         $this->load->library('Portal_sso', NULL, 'portal_sso');
         $identity = $this->portal_sso->exchangeCode(
-            $this->config->item('portal_sso'),
+            $this->config->item('portal_sso', 'portal_sso'),
             $code,
             $pending['code_verifier'],
             $state
         );
 
         if ($identity === FALSE) {
-            $this->ssoFailure('Portal gagal memverifikasi login. Silakan coba kembali.');
+            $failure = $this->portal_sso->getLastErrorCode();
+            if ($failure === 'tls') {
+                $this->ssoFailure('Koneksi aman ke KarismaERP Portal gagal diverifikasi. Sertifikat HTTPS portal kedaluwarsa atau tidak dipercaya; hubungi administrator.');
+            } elseif ($failure === 'network') {
+                $this->ssoFailure('KarismaERP Portal tidak dapat dijangkau untuk menyelesaikan login. Periksa koneksi server dan coba kembali.');
+            } else {
+                $this->ssoFailure('Portal menolak atau mengirim respons login yang tidak valid. Pastikan izin aplikasi dan konfigurasi klien SSO sesuai.');
+            }
             return;
         }
 
         $user = $this->M_Portal_sso->resolveLocalUser($identity);
         if (!$user) {
-            $this->ssoFailure('Akun portal belum dipetakan ke akun KIU PO. Hubungi administrator.');
+            $this->ssoFailure('Akun atau level akses Anda tidak terdaftar di KIU PO. Hubungi administrator.');
             return;
         }
 
@@ -159,7 +170,7 @@ class Auth extends CI_Controller
 
     private function portalSsoConfigured()
     {
-        $settings = $this->config->item('portal_sso');
+        $settings = $this->config->item('portal_sso', 'portal_sso');
         return is_array($settings)
             && !empty($settings['client_id'])
             && !empty($settings['client_secret'])
@@ -173,6 +184,14 @@ class Auth extends CI_Controller
         $https = strtolower((string) $this->input->server('HTTPS'));
         return ($https !== '' && $https !== 'off')
             || (string) $this->input->server('SERVER_PORT') === '443';
+    }
+
+    private function clearLocalIdentity()
+    {
+        $this->session->unset_userdata(array(
+            'id', 'kode', 'username', 'nama_user', 'departemen', 'lv',
+            'is_super_admin', 'status', 'auth_method', 'portal_sub',
+        ));
     }
 
     private function ssoFailure($message)
