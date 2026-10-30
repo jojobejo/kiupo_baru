@@ -59,7 +59,7 @@ $poPembelianDetailUrl = !empty($request->no_spk) && !empty($poPembelian['kd_po_n
             <div class="card-body">
               <div class="row">
                 <div class="col-md-6"><dl class="row mb-0"><dt class="col-sm-5">PIC</dt><dd class="col-sm-7"><?= $h($request->nm_user) ?></dd><dt class="col-sm-5">Departemen</dt><dd class="col-sm-7"><?= $h($request->departemen) ?></dd><dt class="col-sm-5">Tanggal request</dt><dd class="col-sm-7"><?= $h($request->tgl_request) ?></dd><dt class="col-sm-5">Revisi</dt><dd class="col-sm-7"><?= (int) $request->revision_no ?></dd></dl></div>
-                <div class="col-md-6"><dl class="row mb-0"><dt class="col-sm-5">Vendor</dt><dd class="col-sm-7"><?= $h($vendorName ?: '-') ?></dd><dt class="col-sm-5">Lokasi</dt><dd class="col-sm-7"><?= $h($request->lokasi_pekerjaan ?: '-') ?></dd><dt class="col-sm-5">Jadwal</dt><dd class="col-sm-7"><?= $h(($request->tgl_mulai_pekerjaan ?: '-') . ' s/d ' . ($request->tgl_selesai_pekerjaan ?: '-')) ?></dd></dl></div>
+                <div class="col-md-6"><dl class="row mb-0"><dt class="col-sm-5">Lokasi</dt><dd class="col-sm-7"><?= $h($request->lokasi_pekerjaan ?: '-') ?></dd><dt class="col-sm-5">Jadwal</dt><dd class="col-sm-7"><?= $h(($request->tgl_mulai_pekerjaan ?: '-') . ' s/d ' . ($request->tgl_selesai_pekerjaan ?: '-')) ?></dd></dl></div>
               </div>
               <hr>
               <strong>Tujuan pekerjaan</strong><p class="mb-3" style="white-space:pre-wrap"><?= $h($request->tujuan_pekerjaan ?: '-') ?></p>
@@ -85,15 +85,9 @@ $poPembelianDetailUrl = !empty($request->no_spk) && !empty($poPembelian['kd_po_n
           <div class="tab-content">
             <div class="active tab-pane" id="detailScope">
               <h5>Scope pekerjaan</h5>
-              <div class="table-responsive mb-4"><table class="table table-sm table-bordered table-striped"><thead><tr><th>#</th><th>Nama</th><th>Deskripsi</th><th class="text-right">Qty</th><th>Satuan</th><th class="text-right">Harga</th><th class="text-right">Subtotal</th></tr></thead><tbody>
-                <?php if (!$scopes) : ?><tr><td colspan="7" class="text-center text-muted">Belum ada scope.</td></tr><?php endif; ?>
-                <?php foreach ($scopes as $row) : ?><tr><td><?= (int) $row['line_no'] ?></td><td><?= $h($row['nama_scope']) ?></td><td style="white-space:pre-wrap"><?= $h($row['deskripsi']) ?></td><td class="text-right"><?= $h($row['qty']) ?></td><td><?= $h($row['satuan']) ?></td><td class="text-right"><?= $money($row['harga_estimasi']) ?></td><td class="text-right"><?= $money($row['total_estimasi']) ?></td></tr><?php endforeach; ?>
-              </tbody></table></div>
+              <div class="table-responsive mb-4"><table class="table table-sm table-bordered table-striped"><thead><tr><th>#</th><th>Nama Scope</th><th>Deskripsi</th><th class="text-right">QTY</th><th>Satuan</th></tr></thead><tbody><?php if (!$scopes) : ?><tr><td colspan="5" class="text-center text-muted">Belum ada scope.</td></tr><?php endif; ?><?php foreach ($scopes as $row) : ?><tr><td><?= (int) $row['line_no'] ?></td><td><?= $h($row['nama_scope']) ?></td><td style="white-space:pre-wrap"><?= $h($row['deskripsi']) ?></td><td class="text-right"><?= $h($row['qty']) ?></td><td><?= $h($row['satuan']) ?></td></tr><?php endforeach; ?></tbody></table></div>
               <h5>Material / alat dan bahan</h5>
-              <div class="table-responsive"><table class="table table-sm table-bordered table-striped"><thead><tr><th>#</th><th>Nama</th><th>Deskripsi</th><th class="text-right">Qty</th><th>Satuan</th><th>Sumber</th><th class="text-right">Harga</th><th class="text-right">Subtotal</th></tr></thead><tbody>
-                <?php if (!$materials) : ?><tr><td colspan="8" class="text-center text-muted">Belum ada material.</td></tr><?php endif; ?>
-                <?php foreach ($materials as $row) : ?><tr><td><?= (int) $row['line_no'] ?></td><td><?= $h($row['nama_material']) ?></td><td style="white-space:pre-wrap"><?= $h($row['deskripsi']) ?></td><td class="text-right"><?= $h($row['qty_kebutuhan']) ?></td><td><?= $h(isset($row['satuan_tampil']) ? $row['satuan_tampil'] : $row['satuan']) ?></td><td><?= $h($row['sumber_material']) ?></td><td class="text-right"><?= $money($row['harga_estimasi']) ?></td><td class="text-right"><?= $money($row['total_estimasi']) ?></td></tr><?php endforeach; ?>
-              </tbody></table></div>
+              <div class="table-responsive"><table class="table table-sm table-bordered table-striped"><thead><tr><th>#</th><th>Nama Alat/Bahan</th><th>Deskripsi / Spesifikasi</th><th class="text-right">QTY</th><th>Satuan</th><th>Sumber</th></tr></thead><tbody><?php if (!$materials) : ?><tr><td colspan="6" class="text-center text-muted">Belum ada material.</td></tr><?php endif; ?><?php foreach ($materials as $row) : ?><tr><td><?= (int) $row['line_no'] ?></td><td><?= $h($row['nama_material']) ?></td><td style="white-space:pre-wrap"><?= $h($row['deskripsi']) ?></td><td class="text-right"><?= $h($row['qty_kebutuhan']) ?></td><td><?= $h(isset($row['satuan_tampil']) ? $row['satuan_tampil'] : $row['satuan']) ?></td><td><?= $h($row['sumber_material']) ?></td></tr><?php endforeach; ?></tbody></table></div>
             </div>
 
             <div class="tab-pane" id="detailDocument">
@@ -154,10 +148,7 @@ $poPembelianDetailUrl = !empty($request->no_spk) && !empty($poPembelian['kd_po_n
             </div>
 
             <div class="tab-pane" id="detailLog">
-              <div class="table-responsive"><table class="table table-sm table-bordered table-striped"><thead><tr><th>Waktu</th><th>Aktivitas</th><th>Status</th><th>Aktor</th><th>Catatan</th></tr></thead><tbody>
-                <?php if (!$history['logs']) : ?><tr><td colspan="5" class="text-center text-muted">Belum ada log aktivitas.</td></tr><?php endif; ?>
-                <?php foreach ($history['logs'] as $row) : ?><tr><td><?= $h($value($row, 'created_at')) ?></td><td><?= $h($value($row, 'event_type')) ?></td><td><?= $h($value($row, 'from_status')) ?> → <?= $h($value($row, 'to_status')) ?></td><td><?= $h($value($row, 'actor_name')) ?> (<?= $h($value($row, 'actor_role')) ?>)</td><td style="white-space:pre-wrap"><?= $h($value($row, 'catatan')) ?></td></tr><?php endforeach; ?>
-              </tbody></table></div>
+              <div class="table-responsive"><table class="table table-sm table-bordered table-striped"><thead><tr><th>#</th><th>Nama Alat/Bahan</th><th>Deskripsi / Spesifikasi</th><th class="text-right">QTY</th><th>Satuan</th><th>Sumber</th></tr></thead><tbody><?php if (!$materials) : ?><tr><td colspan="6" class="text-center text-muted">Belum ada material.</td></tr><?php endif; ?><?php foreach ($materials as $row) : ?><tr><td><?= (int) $row['line_no'] ?></td><td><?= $h($row['nama_material']) ?></td><td style="white-space:pre-wrap"><?= $h($row['deskripsi']) ?></td><td class="text-right"><?= $h($row['qty_kebutuhan']) ?></td><td><?= $h(isset($row['satuan_tampil']) ? $row['satuan_tampil'] : $row['satuan']) ?></td><td><?= $h($row['sumber_material']) ?></td></tr><?php endforeach; ?></tbody></table></div>
             </div>
           </div>
         </div>

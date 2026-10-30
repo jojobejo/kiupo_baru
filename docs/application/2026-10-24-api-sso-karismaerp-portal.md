@@ -20,8 +20,9 @@ Semua endpoint wajib memakai HTTPS dan sertifikat harus dipercaya oleh browser s
 | Otorisasi | `GET {portal_base_url}/sso/authorize` | Query: `client_id`, `redirect_uri`, `state`, `code_challenge`, `code_challenge_method=S256`. Portal memeriksa user, aplikasi, callback terdaftar, lalu mengembalikan browser ke callback. |
 | Callback | `GET {redirect_uri}` | Sukses: `code` dan `state`. Penolakan: `error` (misalnya `access_denied`). KIU PO menerima callback hanya jika state cocok dengan session SSO yang masih berlaku. |
 | Tukar code | `POST {portal_base_url}/api/sso/token` | `Content-Type: application/x-www-form-urlencoded`; body: `client_id`, `client_secret`, `code`, `redirect_uri`, `code_verifier`. Permintaan server-ke-server; code hanya boleh digunakan sekali dan `redirect_uri` harus persis sama. |
+| Konfirmasi session akun | `POST {portal_base_url}/api/sso/login-event` | KIU PO mengirim konfirmasi server-ke-server setelah session lokal akun pilihan dibuat, berisi `client_id`, `client_secret`, `sub`, `account_username`, `event_id`, IP, dan user-agent. |
 
-Respons sukses token yang diterima KIU PO berbentuk JSON dengan `success=true` dan `data` berisi `app_code`, `state`, serta `user`. User wajib berisi `sub`, `username`, `auth_source`, dan `user_id`; `sub` harus sama dengan `{auth_source}:{user_id}`. `name` opsional. KIU PO memvalidasi `app_code` dan `state` sebelum memakai klaim identitas. Respons gagal, struktur berbeda, TLS gagal, atau klaim tidak valid akan menolak login.
+Respons sukses token yang diterima KIU PO berbentuk JSON dengan `success=true` dan `data` berisi `app_code`, `state`, serta `user`. User wajib berisi `sub`, `username`, `auth_source`, dan `user_id`; `sub` harus sama dengan `{auth_source}:{user_id}`. `name` opsional. Jika admin Portal menetapkan akun klien, `data.client_account_username` berisi username lokal pilihan secara opsional. KIU PO memvalidasi `app_code` dan `state` sebelum memakai klaim identitas. Respons gagal, struktur berbeda, TLS gagal, atau klaim tidak valid akan menolak login.
 
 KIU PO menghasilkan `state` dan `code_verifier` acak untuk tiap proses, menyimpan keduanya di session server, lalu mengirim SHA-256 challenge (`S256`) ke Portal. Callback hanya berlaku 10 menit di sisi KIU PO. Secret, verifier, dan respons token tidak dikirim ke browser atau dicatat ke log.
 
@@ -32,7 +33,7 @@ KIU PO menghasilkan `state` dan `code_verifier` acak untuk tiap proses, menyimpa
 3. Simpan client secret di environment server atau secret manager. Jangan masukkan secret ke Git atau URL.
 4. Atur `KARISMAERP_SSO_CLIENT_ID`, `KARISMAERP_SSO_CLIENT_SECRET`, `KARISMAERP_SSO_PORTAL_BASE_URL`, dan `KARISMAERP_SSO_REDIRECT_URI`. `KARISMAERP_SSO_CA_BUNDLE` hanya diperlukan jika CA portal privat tidak ada di trust store PHP.
 5. Pastikan PHP cURL aktif, domain HTTPS cocok dengan sertifikat, dan CA dipercaya. Jangan mematikan verifikasi TLS.
-6. Siapkan akun lokal `tbpo_user` dengan username yang sama persis dan level akses 1–6. SSO tidak membuat user lokal baru dan tidak mengambil role dari Portal.
+6. Siapkan akun lokal `tbpo_user` dengan username yang sama persis dan level akses 1–6. Jika menggunakan penetapan akun Portal, username yang dipilih harus tersedia tepat satu kali pada `tbpo_user`. SSO tidak membuat user lokal baru dan tidak mengambil role dari Portal.
 7. Terapkan migrasi `database/sql/portal_sso_identity_20261023.sql` pada database KIU PO sebelum mengaktifkan login. Lihat dokumen [skema database SSO](../database/2026-10-23-schema-pemetaan-identitas-sso.md).
 
 ## Tata cara pengguna
@@ -40,7 +41,7 @@ KIU PO menghasilkan `state` dan `code_verifier` acak untuk tiap proses, menyimpa
 1. Login ke KarismaERP Portal.
 2. Pilih kartu **KIU PO** yang tersedia untuk akun Anda.
 3. KIU PO akan memvalidasi ulang akun Portal meskipun browser masih memiliki session lokal dari user sebelumnya.
-4. Jika user Portal diizinkan, subject terpetakan ke tepat satu user lokal, dan level akses lokal didukung, KIU PO membuat session dan membuka Dashboard sesuai role lokal.
+4. Jika user Portal diizinkan dan admin menetapkan akun klien, KIU PO mencari `client_account_username` di `tbpo_user`, memeriksa level akses lokal, lalu membuat session dan membuka Dashboard sesuai role lokal. Jika klien memiliki akun impor tetapi belum ada penetapan admin, Portal menolak login. Alur username Portal tetap berlaku untuk klien yang belum menggunakan daftar akun impor.
 5. Jika akun/level tidak cocok atau akses Portal ditolak, login ditolak dan session user sebelumnya tidak dipakai.
 
 Untuk berganti akun Portal, logout dari Portal lalu login sebagai akun tujuan terlebih dahulu. Melakukan logout hanya dari KIU PO tidak mengakhiri session Portal.
@@ -48,6 +49,10 @@ Untuk berganti akun Portal, logout dari Portal lalu login sebagai akun tujuan te
 ## Database yang diperlukan
 
 SSO memerlukan tabel `tbpo_sso_identity` untuk mengikat `external_sub` Portal ke `tbpo_user.id_user`. `id_user` dan `external_sub` masing-masing unik; foreign key mencegah mapping ke akun yang tidak ada. Tidak ada kolom atau perubahan pada `tbpo_user`. Perbaikan alur pergantian akun tidak memerlukan perubahan skema tambahan. Jangan menjalankan rollback saat SSO aktif karena seluruh mapping akan terhapus.
+
+Jika Portal mengirim `client_account_username`, KIU PO memindahkan mapping subject yang sama ke akun lokal pilihan selama akun tersebut belum terikat ke subject Portal lain. Perubahan ini memakai struktur `tbpo_sso_identity` yang sudah ada; tidak ada perubahan schema.
+
+Untuk akun yang ditetapkan admin, callback membuat session lokal lalu mengirim konfirmasi ke endpoint `api/sso/login-event`. KIU PO hanya melanjutkan ke Dashboard setelah Portal menerima dan memvalidasi event tersebut terhadap penetapan akun aktif. Jika konfirmasi gagal atau tabel histori Portal belum tersedia, session lokal dibersihkan dan login dihentikan. Event ID acak mencegah satu konfirmasi tercatat dua kali. Histori disimpan oleh database Portal; tidak ada tabel baru di database KIU PO.
 
 ## Pemeriksaan gagal login
 

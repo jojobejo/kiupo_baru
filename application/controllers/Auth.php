@@ -165,6 +165,30 @@ class Auth extends CI_Controller
             'portal_sub' => $identity['sub'],
         ));
 
+        if (!empty($identity['client_account_username'])) {
+            try {
+                $loginEventId = bin2hex(random_bytes(32));
+            } catch (Exception $exception) {
+                $this->clearLocalIdentity();
+                $this->session->sess_regenerate(TRUE);
+                $this->ssoFailure('Session login tidak dapat dicatat. Silakan coba kembali atau hubungi administrator.');
+                return;
+            }
+            $loginRecorded = $this->portal_sso->recordLoginEvent(
+                $this->config->item('portal_sso', 'portal_sso'),
+                $identity,
+                $loginEventId,
+                $this->input->ip_address(),
+                (string)$this->input->server('HTTP_USER_AGENT')
+            );
+            if (!$loginRecorded) {
+                $this->clearLocalIdentity();
+                $this->session->sess_regenerate(TRUE);
+                $this->ssoFailure('Session login gagal dicatat oleh Portal. Login dihentikan agar penggunaan akun dapat dipantau.');
+                return;
+            }
+        }
+
         redirect('dashboard');
     }
 

@@ -42,26 +42,6 @@ $h = static function ($value) {
           <form id="pojasaPicForm" novalidate>
             <input type="hidden" id="requestCode" value="<?= $h($requestCode) ?>">
             <div class="row">
-              <div class="col-md-6">
-                <div class="form-group">
-                  <label>Vendor terdaftar</label>
-                  <select id="vendorCode" class="form-control">
-                    <option value="">-- Pilih vendor terdaftar --</option>
-                    <?php foreach ($vendors as $vendor) : ?>
-                      <option value="<?= $h($vendor['kd_vendor_jasa']) ?>" <?= (string) $field($request, 'kd_vendor_jasa') === (string) $vendor['kd_vendor_jasa'] ? 'selected' : '' ?>><?= $h($vendor['nama_vendor']) ?><?= trim((string) $vendor['kategori_jasa']) !== '' ? ' — ' . $h($vendor['kategori_jasa']) : '' ?></option>
-                    <?php endforeach; ?>
-                  </select>
-                </div>
-              </div>
-              <div class="col-md-6">
-                <div class="form-group">
-                  <label>Nama vendor / toko manual</label>
-                  <input id="vendorProposal" class="form-control" maxlength="180" value="<?= $h($field($request, 'vendor_usulan')) ?>" placeholder="Isi bila vendor tidak ada dalam pilihan">
-                  <small class="form-text text-muted"><span class="text-danger">* Wajib</span> pilih salah satu: vendor terdaftar atau nama vendor/toko manual.</small>
-                </div>
-              </div>
-            </div>
-            <div class="row">
               <div class="col-md-6"><div class="form-group"><label for="plannedStartDate">Tanggal rencana start pekerjaan <span class="text-danger">*</span></label><input id="plannedStartDate" type="date" class="form-control" value="<?= $h($field($request, 'tgl_mulai_pekerjaan')) ?>"></div></div>
               <div class="col-md-6"><div class="form-group"><label for="plannedCompletionDate">Target penyelesaian <span class="text-danger">*</span></label><input id="plannedCompletionDate" type="date" class="form-control" value="<?= $h($field($request, 'tgl_selesai_pekerjaan')) ?>"></div></div>
             </div>
@@ -98,7 +78,7 @@ $h = static function ($value) {
         <div class="card-body p-0">
           <div class="table-responsive">
             <table class="table table-bordered table-sm mb-0" id="scopeTable">
-              <thead><tr><th style="min-width:180px">Nama scope</th><th style="min-width:220px">Deskripsi</th><th style="width:110px">Qty</th><th style="width:120px">Satuan</th><th style="width:160px">Harga estimasi</th><th style="width:160px">Subtotal</th><th style="width:45px"></th></tr></thead>
+              <thead><tr><th style="min-width:180px">Nama scope</th><th style="min-width:220px">Deskripsi</th><th style="width:110px">Qty</th><th style="width:120px">Satuan</th><th style="width:45px"></th></tr></thead>
               <tbody>
                 <?php foreach ($scopes ?: array(array()) as $row) : ?>
                   <tr class="scope-row">
@@ -106,13 +86,10 @@ $h = static function ($value) {
                     <td><textarea class="form-control form-control-sm line-description" rows="1" maxlength="5000" placeholder="Uraikan pekerjaan"><?= $h(isset($row['deskripsi']) ? $row['deskripsi'] : '') ?></textarea></td>
                     <td><input type="number" min="0" step="0.01" class="form-control form-control-sm line-qty" value="<?= $h(isset($row['qty']) ? $row['qty'] : '') ?>" placeholder="0"></td>
                     <td><input class="form-control form-control-sm line-unit" maxlength="40" value="<?= $h(isset($row['satuan']) ? $row['satuan'] : '') ?>" placeholder="Unit"></td>
-                    <td><input type="number" min="0" step="0.01" class="form-control form-control-sm line-price" value="<?= $h(isset($row['harga_estimasi']) ? $row['harga_estimasi'] : '') ?>" placeholder="0"></td>
-                    <td class="line-subtotal text-right align-middle">Rp 0</td>
                     <td class="text-center align-middle"><button type="button" class="btn btn-xs btn-outline-danger remove-line" title="Hapus baris"><i class="fas fa-times"></i></button></td>
                   </tr>
                 <?php endforeach; ?>
               </tbody>
-              <tfoot><tr><th colspan="5" class="text-right">Total estimasi jasa</th><th id="scopeTotal" class="text-right">Rp 0</th><th></th></tr></tfoot>
             </table>
           </div>
         </div>
@@ -126,7 +103,7 @@ $h = static function ($value) {
         <div class="card-body p-0">
           <div class="table-responsive">
             <table class="table table-bordered table-sm mb-0" id="materialTable">
-              <thead><tr><th style="min-width:180px">Nama alat/bahan</th><th style="min-width:200px">Deskripsi / spesifikasi</th><th style="width:100px">Qty</th><th style="width:110px">Satuan</th><th style="width:150px">Estimasi biaya</th><th style="width:150px">Subtotal</th><th style="width:45px"></th></tr></thead>
+              <thead><tr><th style="min-width:180px">Nama alat/bahan</th><th style="min-width:200px">Deskripsi / spesifikasi</th><th style="width:100px">Qty</th><th style="width:110px">Satuan</th><th style="width:45px"></th></tr></thead>
               <tbody>
                 <?php foreach ($materials ?: array(array()) as $row) : ?>
                   <tr class="material-row">
@@ -134,13 +111,10 @@ $h = static function ($value) {
                     <td><textarea class="form-control form-control-sm line-description" rows="1" maxlength="5000" placeholder="Spesifikasi alat/bahan" <?= !empty($row['id_brg_nk']) ? 'readonly' : '' ?>><?= $h(isset($row['deskripsi']) ? $row['deskripsi'] : '') ?></textarea></td>
                     <td><input type="number" min="0" step="0.01" class="form-control form-control-sm line-qty" value="<?= $h(isset($row['qty_kebutuhan']) ? $row['qty_kebutuhan'] : '') ?>" placeholder="0"></td>
                     <td><input class="form-control form-control-sm line-unit" maxlength="40" value="<?= $h(isset($row['satuan_tampil']) ? $row['satuan_tampil'] : (isset($row['satuan']) ? $row['satuan'] : '')) ?>" placeholder="Meter"></td>
-                    <td><input type="number" min="0" step="0.01" class="form-control form-control-sm line-price" value="<?= $h(isset($row['harga_estimasi']) ? $row['harga_estimasi'] : '') ?>" placeholder="0"></td>
-                    <td class="line-subtotal text-right align-middle">Rp 0</td>
                     <td class="text-center align-middle"><button type="button" class="btn btn-xs btn-outline-danger remove-line" title="Hapus baris"><i class="fas fa-times"></i></button></td>
                   </tr>
                 <?php endforeach; ?>
               </tbody>
-              <tfoot><tr><th colspan="5" class="text-right">Total estimasi material</th><th id="materialTotal" class="text-right">Rp 0</th><th></th></tr></tfoot>
             </table>
           </div>
         </div>
@@ -159,8 +133,8 @@ $h = static function ($value) {
 </div>
 
 <script type="text/template" id="scopeRowTemplate">
-  <tr class="scope-row"><td><input class="form-control form-control-sm line-name" maxlength="180" placeholder="Contoh: Instalasi AC"></td><td><textarea class="form-control form-control-sm line-description" rows="1" maxlength="5000" placeholder="Uraikan pekerjaan"></textarea></td><td><input type="number" min="0" step="0.01" class="form-control form-control-sm line-qty" placeholder="0"></td><td><input class="form-control form-control-sm line-unit" maxlength="40" placeholder="Unit"></td><td><input type="number" min="0" step="0.01" class="form-control form-control-sm line-price" placeholder="0"></td><td class="line-subtotal text-right align-middle">Rp 0</td><td class="text-center align-middle"><button type="button" class="btn btn-xs btn-outline-danger remove-line" title="Hapus baris"><i class="fas fa-times"></i></button></td></tr>
+  <tr class="scope-row"><td><input class="form-control form-control-sm line-name" maxlength="180" placeholder="Contoh: Instalasi AC"></td><td><textarea class="form-control form-control-sm line-description" rows="1" maxlength="5000" placeholder="Uraikan pekerjaan"></textarea></td><td><input type="number" min="0" step="0.01" class="form-control form-control-sm line-qty" placeholder="0"></td><td><input class="form-control form-control-sm line-unit" maxlength="40" placeholder="Unit"></td><td class="text-center align-middle"><button type="button" class="btn btn-xs btn-outline-danger remove-line" title="Hapus baris"><i class="fas fa-times"></i></button></td></tr>
 </script>
 <script type="text/template" id="materialRowTemplate">
-  <tr class="material-row"><td><select class="form-control form-control-sm material-catalog"></select><input type="hidden" class="material-reference-type" value="MANUAL"><input type="hidden" class="material-proposal-id" value=""><input class="form-control form-control-sm line-name mt-1" maxlength="180" placeholder="Nama barang manual"><small class="material-proposal-label text-muted"></small></td><td><textarea class="form-control form-control-sm line-description" rows="1" maxlength="5000" placeholder="Spesifikasi alat/bahan"></textarea></td><td><input type="number" min="0" step="0.01" class="form-control form-control-sm line-qty" placeholder="0"></td><td><input class="form-control form-control-sm line-unit" maxlength="40" placeholder="Meter"></td><td><input type="number" min="0" step="0.01" class="form-control form-control-sm line-price" placeholder="0"></td><td class="line-subtotal text-right align-middle">Rp 0</td><td class="text-center align-middle"><button type="button" class="btn btn-xs btn-outline-danger remove-line" title="Hapus baris"><i class="fas fa-times"></i></button></td></tr>
+  <tr class="material-row"><td><select class="form-control form-control-sm material-catalog"></select><input type="hidden" class="material-reference-type" value="MANUAL"><input type="hidden" class="material-proposal-id" value=""><input class="form-control form-control-sm line-name mt-1" maxlength="180" placeholder="Nama barang manual"><small class="material-proposal-label text-muted"></small></td><td><textarea class="form-control form-control-sm line-description" rows="1" maxlength="5000" placeholder="Spesifikasi alat/bahan"></textarea></td><td><input type="number" min="0" step="0.01" class="form-control form-control-sm line-qty" placeholder="0"></td><td><input class="form-control form-control-sm line-unit" maxlength="40" placeholder="Meter"></td><td class="text-center align-middle"><button type="button" class="btn btn-xs btn-outline-danger remove-line" title="Hapus baris"><i class="fas fa-times"></i></button></td></tr>
 </script>

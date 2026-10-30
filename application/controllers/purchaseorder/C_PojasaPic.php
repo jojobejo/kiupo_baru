@@ -284,8 +284,7 @@ class C_PojasaPic extends CI_Controller
         if (!$this->validRequestCode($requestCode)) {
             return $this->json(false, 'VALIDATION_ERROR', 'Kode request tidak valid.', array(), 422, array('kd_po_jasa' => 'Kode request wajib diisi.'));
         }
-        $allowWithoutDocuments = (string) $this->input->post('allow_without_documents', true) === '1';
-        $result = $this->M_PojasaPic->submit_request($this->context(), $requestCode, $allowWithoutDocuments);
+        $result = $this->M_PojasaPic->submit_request($this->context(), $requestCode, false);
         if (!$result['success']) {
             if ($result['code'] === 'SUBMIT_VALIDATION') {
                 return $this->json(false, $result['code'], 'Request belum memenuhi syarat pengajuan.', array(), 422, $result['errors']);
@@ -513,20 +512,13 @@ class C_PojasaPic extends CI_Controller
     private function validateDraftPayload($payload)
     {
         $errors = array();
-        $vendorCode = strtoupper(trim((string) (isset($payload['kd_vendor_jasa']) ? $payload['kd_vendor_jasa'] : '')));
-        $vendorProposal = trim((string) (isset($payload['vendor_usulan']) ? $payload['vendor_usulan'] : ''));
+        // Vendor and pricing are owned by Purchasing; ignore legacy PIC payload values.
+        $vendorCode = '';
+        $vendorProposal = '';
         $plannedStartDate = trim((string) (isset($payload['tgl_mulai_pekerjaan']) ? $payload['tgl_mulai_pekerjaan'] : ''));
         $plannedCompletionDate = trim((string) (isset($payload['tgl_selesai_pekerjaan']) ? $payload['tgl_selesai_pekerjaan'] : ''));
         $purpose = trim((string) (isset($payload['tujuan_pekerjaan']) ? $payload['tujuan_pekerjaan'] : ''));
         $notes = trim((string) (isset($payload['catatan_pic']) ? $payload['catatan_pic'] : ''));
-        if ($vendorCode !== '' && $vendorProposal !== '') {
-            $errors['vendor'] = 'Pilih satu sumber vendor: vendor terdaftar atau nama vendor/toko manual.';
-        } elseif ($vendorCode !== '' && !$this->M_PojasaPic->active_vendor_exists($vendorCode)) {
-            $errors['kd_vendor_jasa'] = 'Vendor yang dipilih tidak tersedia atau tidak aktif.';
-        }
-        if (mb_strlen($vendorProposal) > 180) {
-            $errors['vendor_usulan'] = 'Nama vendor/toko manual maksimal 180 karakter.';
-        }
         if (mb_strlen($purpose) > 10000) {
             $errors['tujuan_pekerjaan'] = 'Tujuan pekerjaan maksimal 10.000 karakter.';
         }
@@ -583,8 +575,8 @@ class C_PojasaPic extends CI_Controller
             $description = trim((string) (isset($row['deskripsi']) ? $row['deskripsi'] : ''));
             $unit = trim((string) (isset($row['satuan']) ? $row['satuan'] : ''));
             $qty = $this->parseNumber(isset($row[$qtyKey]) ? $row[$qtyKey] : '');
-            $price = $this->parseNumber(isset($row['harga_estimasi']) ? $row['harga_estimasi'] : 0);
-            $isEmpty = $name === '' && $description === '' && ($qty === false || $qty == 0) && ($price === false || $price == 0);
+            $price = 0;
+            $isEmpty = $name === '' && $description === '' && ($qty === false || $qty == 0);
             if ($isEmpty) {
                 continue;
             }
@@ -596,9 +588,6 @@ class C_PojasaPic extends CI_Controller
             }
             if ($qty === false || $qty <= 0 || $qty >= 10000000000000000) {
                 $errors[$type . '_' . $index . '_qty'] = 'Qty harus lebih dari 0.';
-            }
-            if ($price === false || $price < 0 || $price >= 10000000000000000) {
-                $errors[$type . '_' . $index . '_price'] = 'Estimasi biaya tidak valid.';
             }
             if ($unit === '' || mb_strlen($unit) > 40) {
                 $errors[$type . '_' . $index . '_unit'] = 'Satuan wajib diisi, maksimal 40 karakter.';
@@ -782,8 +771,8 @@ class C_PojasaPic extends CI_Controller
         }
         return array(
             'tgl_request' => $row['tgl_request'],
-            'vendor' => htmlspecialchars((string) ($row['nama_vendor_tampil'] ?: '-'), ENT_QUOTES, 'UTF-8'),
-            'total' => 'Rp ' . number_format((float) $row['estimasi_total'], 0, ',', '.'),
+            'scope' => htmlspecialchars((string) ($row['scope_summary'] ?: '-'), ENT_QUOTES, 'UTF-8'),
+            'purpose' => htmlspecialchars((string) ($row['tujuan_pekerjaan'] ?: '-'), ENT_QUOTES, 'UTF-8'),
             'status' => '<span class="badge badge-' . $this->statusColor($row['status']) . '">' . htmlspecialchars($this->statusLabel($row['status']), ENT_QUOTES, 'UTF-8') . '</span>',
             'po_pembelian_status' => !empty($row['kd_po_nk'])
                 ? '<span class="badge badge-info">' . htmlspecialchars((string) ($row['po_pembelian_status'] ?: '-'), ENT_QUOTES, 'UTF-8') . '</span>'

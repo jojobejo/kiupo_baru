@@ -141,11 +141,75 @@ class Portal_sso
             return FALSE;
         }
 
-        return array(
+        $clientAccountUsername = isset($response['data']['client_account_username'])
+            ? $response['data']['client_account_username']
+            : NULL;
+        if ($clientAccountUsername !== NULL
+            && (!is_string($clientAccountUsername) || $clientAccountUsername === '' || strlen($clientAccountUsername) > 190)
+        ) {
+            $this->lastErrorCode = 'portal_response';
+            return FALSE;
+        }
+
+        $identity = array(
             'sub' => $user['sub'],
             'username' => $user['username'],
             'name' => isset($user['name']) && is_string($user['name']) ? $user['name'] : '',
         );
+        if ($clientAccountUsername !== NULL) {
+            $identity['client_account_username'] = $clientAccountUsername;
+        }
+        return $identity;
+    }
+
+    /** Mencatat session lokal yang sudah berhasil dibuat pada Portal. */
+    public function recordLoginEvent($settings, $identity, $eventId, $sourceIp, $userAgent)
+    {
+        if (!extension_loaded('curl')
+            || !is_array($settings)
+            || empty($settings['client_id'])
+            || empty($settings['client_secret'])
+            || !$this->isHttpsUrl(isset($settings['portal_base_url']) ? $settings['portal_base_url'] : '')
+            || !is_array($identity)
+            || empty($identity['sub'])
+            || empty($identity['client_account_username'])
+            || !preg_match('/^[a-f0-9]{64}$/i', (string)$eventId)
+        ) {
+            return FALSE;
+        }
+
+        $fields = array(
+            'client_id' => $settings['client_id'],
+            'client_secret' => $settings['client_secret'],
+            'sub' => $identity['sub'],
+            'account_username' => $identity['client_account_username'],
+            'event_id' => strtolower((string)$eventId),
+            'source_ip' => substr((string)$sourceIp, 0, 45),
+            'user_agent' => substr((string)$userAgent, 0, 255),
+        );
+        $handle = curl_init(rtrim($settings['portal_base_url'], '/') . '/api/sso/login-event');
+        if ($handle === FALSE) return FALSE;
+        curl_setopt_array($handle, array(
+            CURLOPT_POST => TRUE,
+            CURLOPT_POSTFIELDS => http_build_query($fields, '', '&', PHP_QUERY_RFC3986),
+            CURLOPT_HTTPHEADER => array('Content-Type: application/x-www-form-urlencoded', 'Accept: application/json'),
+            CURLOPT_RETURNTRANSFER => TRUE,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_FOLLOWLOCATION => FALSE,
+            CURLOPT_SSL_VERIFYPEER => TRUE,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
+        ));
+        if (!empty($settings['ca_bundle'])) curl_setopt($handle, CURLOPT_CAINFO, $settings['ca_bundle']);
+        $responseBody = curl_exec($handle);
+        $httpCode = (int)curl_getinfo($handle, CURLINFO_HTTP_CODE);
+        $curlError = curl_errno($handle);
+        curl_close($handle);
+        if ($responseBody === FALSE || $curlError !== 0 || $httpCode < 200 || $httpCode >= 300) return FALSE;
+        $response = json_decode($responseBody, TRUE);
+        return is_array($response) && !empty($response['success']);
     }
 
     private function isHttpsUrl($url)

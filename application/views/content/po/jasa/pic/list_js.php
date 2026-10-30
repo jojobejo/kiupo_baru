@@ -29,8 +29,8 @@
     },
     columns: [
       { data: 'tgl_request' },
-      { data: 'vendor' },
-      { data: 'total', className: 'text-left' },
+      { data: 'scope' },
+      { data: 'purpose' },
       { data: 'status', orderable: false, className: 'pojasa-pic-status-column text-left align-middle' },
       { data: 'po_pembelian_status', orderable: false, searchable: false, className: 'pojasa-pic-status-column text-left align-middle' },
       { data: 'actions', orderable: false, searchable: false, className: 'pojasa-pic-actions-column text-center align-middle' }

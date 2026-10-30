@@ -17,6 +17,7 @@
     ,createDemo: <?= json_encode(base_url('pojasa/ajax/workflow/demo/create')) ?>
   };
   var actionMeta = {
+    OK: { label: 'OK - TERUSKAN KE KADEP', icon: 'fa-check', color: 'success' },
     ACC: { label: 'ACC', icon: 'fa-check', color: 'success' },
     REVISI: { label: 'REVISI', icon: 'fa-edit', color: 'warning' },
     PENDING: { label: 'PENDING', icon: 'fa-pause', color: 'secondary' },
@@ -237,9 +238,9 @@
   });
   $('.workflow-comparison-price').each(function(){ formatPriceInput($(this)); updatePurchasingEstimate($(this).closest('tr')); });
   previewPurchasingTotals();
-  $(document).on('input', '.workflow-qty, .workflow-comparison-price', function() { var row=$(this).closest('tr'), price=row.data('new') ? priceValue(row.find('.workflow-comparison-price').val()) : Number(row.find('.workflow-estimate').data('price')), qty=Number(row.find('.workflow-qty').val()); row.find('.workflow-estimate').text(formatRupiah((price||0)*(qty||0))); updatePurchasingEstimate(row); previewTotals(); previewPurchasingTotals(); });
+  $(document).on('input', '.workflow-qty, .workflow-comparison-price', function() { var row=$(this).closest('tr'); updatePurchasingEstimate(row); previewTotals(); previewPurchasingTotals(); });
   $(document).on('blur', '.workflow-comparison-price', function(){ formatPriceInput($(this)); });
-  $(document).on('click', '.workflow-add-draft:not(:disabled)', function() { var button=$(this).prop('disabled',true), row=button.closest('tr'), comparison=priceValue(row.find('.workflow-comparison-price').val()), price=comparison !== null ? comparison : Number(row.find('.workflow-estimate').data('price')); $.ajax({url:endpoints.draft,method:'POST',dataType:'json',headers:{'X-POJASA-CSRF':csrfToken},data:{csrf_token:csrfToken,kd_po_jasa:$('#workflowDetailCode').val(),id_material:row.data('material'),qty:button.data('qty'),harga_estimasi:price,id_vendor_jasa:'',keterangan:'Dibuat dari review Purchasing.',idempotency_token:uuid()}}).done(function(response){updateCsrf(response);if(!response.success){showResponseError(response);button.prop('disabled',false);return;}Swal.fire('Draft pembelian dibuat',response.message,'success');loadState($('#workflowDetailCode').val(),false);}).fail(function(xhr){button.prop('disabled',false);showAjaxError(xhr,'Draft pembelian gagal dibuat.');}); });
+  $(document).on('click', '.workflow-add-draft:not(:disabled)', function() { var button=$(this).prop('disabled',true), row=button.closest('tr'), price=priceValue(row.find('.workflow-comparison-price').val()) || 0; $.ajax({url:endpoints.draft,method:'POST',dataType:'json',headers:{'X-POJASA-CSRF':csrfToken},data:{csrf_token:csrfToken,kd_po_jasa:$('#workflowDetailCode').val(),id_material:row.data('material'),qty:button.data('qty'),harga_estimasi:price,id_vendor_jasa:'',keterangan:'Dibuat dari review Purchasing.',idempotency_token:uuid()}}).done(function(response){updateCsrf(response);if(!response.success){showResponseError(response);button.prop('disabled',false);return;}Swal.fire('Draft pembelian dibuat',response.message,'success');loadState($('#workflowDetailCode').val(),false);}).fail(function(xhr){button.prop('disabled',false);showAjaxError(xhr,'Draft pembelian gagal dibuat.');}); });
 
   $('#workflowDraftPurchaseList').on('click', function() {
     var code = $('#workflowDetailCode').val();
@@ -417,7 +418,7 @@
     $('#workflowIssueSpkPurchase').toggleClass('d-none', state.request.status !== 'MENUNGGU_PENERBITAN_PURCHASING').data('code', state.request.kd_po_jasa);
     (state.materials || []).forEach(function(material) {
       var row = $('#workflowMaterialTable tbody tr[data-material="' + Number(material.id_material) + '"]');
-      row.find('.js-reserved').text(material.reserved_qty); row.find('.js-draft').text(material.active_draft_qty); row.find('.js-ready').val(material.qty_ready);
+      row.find('.js-reserved').text(material.reserved_qty); row.find('.js-draft').text(material.active_draft_qty); row.find('.js-ready').val(material.qty_ready); row.find('.js-available').text(material.qty_ready);
       row.find('.js-remaining').text(material.remaining_need); row.find('.js-source').text(material.computed_source);
       row.find('.js-fulfillment').text(material.fulfillment_status);
       var draftButton = row.find('.workflow-add-draft');
@@ -506,7 +507,7 @@
     var total = 0;
     $(selector + ' tbody tr[data-id]').each(function() {
       var qty = $(this).find('.workflow-qty').length ? Number($(this).find('.workflow-qty').val()) : (Number($(this).children('td').eq(2).text()) || 0);
-      var price = $(this).data('new') ? priceValue($(this).find('.workflow-comparison-price').val()) : Number($(this).find('.workflow-estimate').data('price'));
+      var price = priceValue($(this).find('.workflow-comparison-price').val()) || 0;
       total += qty * price;
     });
     return total;
@@ -514,7 +515,7 @@
 
   function collectReviewRows(selector) {
     var rows=[];
-    $(selector+' tbody tr[data-id], '+selector+' tbody tr[data-new="1"]').each(function(){var row=$(this), price=priceValue(row.find('.workflow-comparison-price').val());rows.push({id:Number(row.data('id'))||0,is_new:Number(row.data('new'))===1,nama_scope:selector==='#workflowScopeTable'?row.find('.workflow-name').val():undefined,nama_material:selector==='#workflowMaterialTable'?row.find('.workflow-name').val():undefined,deskripsi:row.find('.workflow-description').val(),qty:row.find('.workflow-qty').val(),satuan:row.find('.workflow-unit').val(),harga_pembanding:price === null ? '' : price,keterangan_purchasing:row.find('.workflow-purchasing-note').val()});});
+    $(selector+' tbody tr[data-id], '+selector+' tbody tr[data-new="1"]').each(function(){var row=$(this), price=priceValue(row.find('.workflow-comparison-price').val());rows.push({id:Number(row.data('id'))||0,is_new:Number(row.data('new'))===1,nama_scope:selector==='#workflowScopeTable'?row.find('.workflow-name').val():undefined,nama_material:selector==='#workflowMaterialTable'?row.find('.workflow-name').val():undefined,deskripsi:row.find('.workflow-description').val(),qty:row.find('.workflow-qty').val(),satuan:row.find('.workflow-unit').val(),harga_pembanding:price === null ? '' : price,keterangan_purchasing:''});});
     return rows;
   }
 
@@ -522,13 +523,10 @@
     var isScope=section==='scope', table=isScope?$('#workflowScopeTable'):$('#workflowMaterialTable');
     table.find('.workflow-empty').remove();
     var action='<button type="button" class="btn btn-xs btn-outline-danger workflow-delete-row" title="Hapus"><i class="fas fa-trash"></i></button>';
-    var html=isScope
-      ? '<tr data-id="0" data-new="1"><td class="workflow-number">Baru</td><td class="workflow-table-detail"><input class="form-control form-control-sm workflow-name mb-1" maxlength="255" placeholder="Nama scope"><textarea class="form-control form-control-sm workflow-description" rows="2" maxlength="5000" placeholder="Deskripsi"></textarea></td><td><input type="number" min="0.01" step="0.01" class="form-control form-control-sm workflow-qty mb-1" placeholder="Qty"><input class="form-control form-control-sm workflow-unit" maxlength="50" placeholder="Satuan"></td><td><span class="workflow-cell-label">Harga PIC</span><div class="text-muted text-right">-</div><span class="workflow-cell-label mt-2">Estimasi PIC</span><div class="workflow-estimate text-right" data-price="0">Rp 0</div></td><td><div class="workflow-purchasing-estimate text-right">-</div></td><td class="workflow-table-purchasing"><span class="workflow-cell-label">Harga Pembanding</span><input type="text" inputmode="numeric" class="form-control form-control-sm workflow-comparison-price mb-2" placeholder="Harga satuan"><span class="workflow-cell-label">Keterangan</span><textarea class="form-control form-control-sm workflow-purchasing-note" rows="2" maxlength="5000" placeholder="Wajib jika harga pembanding diisi"></textarea></td><td class="workflow-table-actions">'+action+'</td></tr>'
-      : '<tr data-id="0" data-material="0" data-new="1"><td class="workflow-table-detail"><input class="form-control form-control-sm workflow-name mb-1" maxlength="255" placeholder="Nama material"><textarea class="form-control form-control-sm workflow-description" rows="2" maxlength="5000" placeholder="Deskripsi"></textarea><input class="form-control form-control-sm workflow-unit mt-1" maxlength="50" placeholder="Satuan"></td><td class="workflow-stock-column"><span class="workflow-cell-label">Sumber / Status</span><span class="badge badge-secondary">BARANG MASTER MANUAL</span><span class="workflow-cell-label mt-2">Stok tersedia</span><input type="number" min="0" step="0.01" class="form-control form-control-sm js-ready" value="0" placeholder="0" readonly></td><td class="workflow-need-column"><input type="number" min="0" step="0.01" class="form-control form-control-sm workflow-qty" placeholder="0"></td><td><span class="workflow-cell-label">Harga PIC</span><div class="text-muted text-right">-</div><span class="workflow-cell-label mt-2">Estimasi PIC</span><div class="workflow-estimate text-right" data-price="0">Rp 0</div></td><td><div class="workflow-purchasing-estimate text-right">-</div></td><td class="workflow-table-purchasing"><span class="workflow-cell-label">Harga Pembanding</span><input type="text" inputmode="numeric" class="form-control form-control-sm workflow-comparison-price mb-2" placeholder="Harga satuan"><span class="workflow-cell-label">Keterangan</span><textarea class="form-control form-control-sm workflow-purchasing-note" rows="2" maxlength="5000" placeholder="Wajib jika harga pembanding diisi"></textarea></td><td class="workflow-table-actions">'+action+'</td></tr>';
+    var html='<tr data-id="0" data-material="0" data-new="1"><td><input class="form-control form-control-sm workflow-name" maxlength="255" placeholder="'+(isScope?'Nama scope':'Nama material')+'"></td><td><div class="d-flex"><input type="number" min="0.01" step="0.01" class="form-control form-control-sm workflow-qty mr-1" placeholder="Qty"><input class="form-control form-control-sm workflow-unit" maxlength="50" placeholder="Satuan"></div>'+(isScope?'':'<small class="text-muted d-block mt-1">Stok tersedia: 0</small>')+'</td><td><input type="text" inputmode="numeric" class="form-control form-control-sm workflow-comparison-price" placeholder="Harga satuan"></td><td class="text-right"><span class="workflow-purchasing-estimate">-</span></td><td><textarea class="form-control form-control-sm workflow-description" rows="2" maxlength="5000" placeholder="Keterangan / spesifikasi"></textarea></td><td class="workflow-table-actions">'+action+'</td></tr>';
     table.find('tbody').append(html); table.find('tbody tr:last .workflow-delete-row').prop('disabled', !table.data('editing')); table.find('tbody tr:last input, tbody tr:last textarea').toggleClass('workflow-edit-active', !!table.data('editing'));
   }
-
-  function renderTotals(totals) {
+ {
     $('#workflowDetailScopeTotal').text(formatRupiah(totals.jasa));
     $('#workflowDetailMaterialTotal').text(formatRupiah(totals.material));
     $('#workflowDetailGrandTotal').text(formatRupiah(totals.grand_total));
@@ -545,9 +543,8 @@
       var total = 0;
       $(selector + ' tbody tr[data-id], ' + selector + ' tbody tr[data-new="1"]').each(function() {
         var row = $(this), qty = Number(row.find('.workflow-qty').val()) || 0;
-        var purchasingPrice = priceValue(row.find('.workflow-comparison-price').val());
-        var picPrice = Number(row.find('.workflow-estimate').data('price')) || 0;
-        total += qty * (purchasingPrice !== null && purchasingPrice > 0 ? purchasingPrice : picPrice);
+        var purchasingPrice = priceValue(row.find('.workflow-comparison-price').val()) || 0;
+        total += qty * purchasingPrice;
       });
       return total;
     };
@@ -561,8 +558,9 @@
     if (action === 'PENDING') { return 'Request akan tetap terkunci untuk PIC sampai KADEP memberi tindakan lanjutan.'; }
     if (action === 'REVISI') { return 'Request akan dikembalikan ke pihak yang wajib melakukan perbaikan.'; }
     if (action === 'REJECT') { return 'Request akan masuk ke status penolakan terminal.'; }
-    if (action === 'UPDATE' && request.status === 'MENUNGGU_PURCHASING_AWAL') { return 'Seluruh update Purchasing akan dikirim ke PIC untuk ditinjau dan dikonfirmasi.'; }
-    if (action === 'ACC' && request.status === 'MENUNGGU_KONFIRMASI_PIC') { return 'PIC menyatakan data Purchasing telah disepakati. Request dikembalikan ke Purchasing untuk diajukan ke KADEP.'; }
+    if (action === 'OK' && request.status === 'MENUNGGU_PURCHASING_AWAL') { return 'Harga dan vendor Purchasing akan diteruskan ke Kadep untuk approval.'; }
+    if (action === 'REVISI' && request.status === 'MENUNGGU_PURCHASING_AWAL') { return 'Request dikembalikan ke PIC untuk diperbaiki.'; }
+    if (action === 'ACC' && request.status === 'MENUNGGU_KONFIRMASI_PIC') { return 'Konfirmasi PIC historis akan diteruskan ke Kadep.'; }
     if (action === 'SUBMIT') { return 'Request akan diajukan kembali ke approver yang meminta revisi.'; }
     return 'Status request akan diperbarui.';
   }
@@ -630,7 +628,7 @@
     return isFinite(number) && number >= 0 ? number : null;
   }
   function formatPriceInput(input) { var value=priceValue(input.val()); input.val(value === null ? '' : Math.round(value).toLocaleString('id-ID')); }
-  function updatePurchasingEstimate(row) { var purchasingPrice=priceValue(row.find('.workflow-comparison-price').val()), picPrice=Number(row.find('.workflow-estimate').data('price')) || 0, effectivePrice=purchasingPrice !== null && purchasingPrice > 0 ? purchasingPrice : picPrice, qty=Number(row.find('.workflow-qty').val()); row.find('.workflow-purchasing-price').text(formatRupiah(effectivePrice)); row.find('.workflow-purchasing-estimate').text(formatRupiah((qty || 0) * effectivePrice)); }
+  function updatePurchasingEstimate(row) { var unitPrice=priceValue(row.find('.workflow-comparison-price').val()), qty=Number(row.find('.workflow-qty').val()) || 0; row.find('.workflow-purchasing-estimate').text(unitPrice === null ? '-' : formatRupiah(qty * unitPrice)); }
   function escapeHtml(value) { return $('<div>').text(value === null || value === undefined ? '' : value).html(); }
   function uuid() {
     if (window.crypto && window.crypto.getRandomValues) {

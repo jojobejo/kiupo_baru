@@ -99,8 +99,8 @@ class M_PojasaPic extends CI_Model
         $hasPurchaseIntegration = $this->db->table_exists('tbpo_jasa_purchase_submission');
         $columns = array(
             0 => 'r.tgl_request',
-            1 => 'COALESCE(v.nama_vendor, r.vendor_usulan)',
-            2 => 'r.estimasi_total',
+            1 => 'scope_summary',
+            2 => 'r.tujuan_pekerjaan',
             3 => 'r.status',
             4 => $hasPurchaseIntegration ? 'pn.status' : 'r.id_po_jasa',
         );
@@ -131,8 +131,8 @@ class M_PojasaPic extends CI_Model
         $search = trim((string) $params['search']);
         if ($search !== '') {
             $like = '%' . $search . '%';
-            $where[] = '(r.kd_po_jasa LIKE ? OR r.tujuan_pekerjaan LIKE ? OR r.lokasi_pekerjaan LIKE ? OR r.vendor_usulan LIKE ? OR v.nama_vendor LIKE ?)';
-            array_push($filteredBinds, $like, $like, $like, $like, $like);
+            $where[] = '(r.kd_po_jasa LIKE ? OR r.tujuan_pekerjaan LIKE ? OR r.lokasi_pekerjaan LIKE ?)';
+            array_push($filteredBinds, $like, $like, $like);
         }
 
         $purchaseJoin = $hasPurchaseIntegration
@@ -142,7 +142,7 @@ class M_PojasaPic extends CI_Model
         $filtered = (int) $this->db->query('SELECT COUNT(*) AS total' . $fromSql, $filteredBinds)->row()->total;
         $orderColumn = isset($columns[$params['order_column']]) ? $columns[$params['order_column']] : 'r.id_po_jasa';
         $orderDirection = strtolower($params['order_direction']) === 'asc' ? 'ASC' : 'DESC';
-        $sql = 'SELECT r.*, COALESCE(v.nama_vendor, r.vendor_usulan) AS nama_vendor_tampil' . ($purchaseJoin ? ', ps.kd_po_nk, pn.status AS po_pembelian_status' : '') . $fromSql
+        $sql = 'SELECT r.*, (SELECT GROUP_CONCAT(s.nama_scope ORDER BY s.line_no SEPARATOR ", ") FROM tbpo_jasa_scope s WHERE s.kd_po_jasa=r.kd_po_jasa AND s.revision_no=COALESCE(NULLIF(r.edit_revision_no,0),r.revision_no) AND s.is_active=1) AS scope_summary' . ($purchaseJoin ? ', ps.kd_po_nk, pn.status AS po_pembelian_status' : '') . $fromSql
             . ' ORDER BY ' . $orderColumn . ' ' . $orderDirection . ', r.id_po_jasa DESC LIMIT ?, ?';
         $dataBinds = array_merge($filteredBinds, array((int) $params['start'], (int) $params['length']));
         $rows = $this->db->query($sql, $dataBinds)->result_array();
@@ -551,13 +551,6 @@ class M_PojasaPic extends CI_Model
         if (empty($request->tgl_mulai_pekerjaan) || empty($request->tgl_selesai_pekerjaan)
             || $request->tgl_selesai_pekerjaan < $request->tgl_mulai_pekerjaan) {
             $errors['jadwal'] = 'Tanggal rencana start pekerjaan dan target penyelesaian wajib diisi dengan urutan yang benar.';
-        }
-        if (!empty($request->kd_vendor_jasa) && trim((string) $request->vendor_usulan) !== '') {
-            $errors['vendor'] = 'Pilih satu sumber vendor: vendor terdaftar atau nama vendor/toko manual.';
-        } elseif (empty($request->kd_vendor_jasa) && trim((string) $request->vendor_usulan) === '') {
-            $errors['vendor'] = 'Pilih vendor atau isi nama vendor/toko secara manual.';
-        } elseif (!empty($request->kd_vendor_jasa) && !$this->active_vendor_exists($request->kd_vendor_jasa)) {
-            $errors['vendor'] = 'Vendor yang dipilih tidak tersedia atau tidak aktif.';
         }
         $scopeCount = (int) $this->db->where(array('kd_po_jasa' => $request->kd_po_jasa, 'revision_no' => $revisionNo, 'is_active' => 1))->count_all_results('tbpo_jasa_scope');
         if ($scopeCount < 1) {

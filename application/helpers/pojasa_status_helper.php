@@ -43,22 +43,29 @@ function pojasa_status_is_terminal($status)
     ), true);
 }
 
-function pojasa_requires_dirut_ops($departemen)
+function pojasa_requires_dirut_ops($departemen, $nilaiJasa = null)
 {
     $departemen = function_exists('pojasa_normalize_department')
         ? pojasa_normalize_department($departemen)
         : strtoupper(trim((string) $departemen));
 
-    return in_array($departemen, array('IT', 'HRD', 'GA'), true);
+    return $departemen === 'IT'
+        || $departemen === 'GA'
+        || ($nilaiJasa !== null && (float) $nilaiJasa <= 500000);
 }
 
-function pojasa_next_status($currentStatus, $action, $departemen, $dirutOpsApproved = false)
+function pojasa_next_status($currentStatus, $action, $departemen, $dirutOpsApproved = false, $nilaiJasa = null)
 {
     $currentStatus = strtoupper(trim((string) $currentStatus));
     $action = strtoupper(trim((string) $action));
     $transitions = array(
         'DRAFT' => array('SUBMIT' => 'MENUNGGU_PURCHASING_AWAL'),
-        'MENUNGGU_PURCHASING_AWAL' => array('UPDATE' => 'MENUNGGU_KONFIRMASI_PIC'),
+        'MENUNGGU_PURCHASING_AWAL' => array(
+            'OK' => 'MENUNGGU_KADEP',
+            'REVISI' => 'REVISI_PIC',
+            // Keep the legacy action for requests already waiting on the old PIC confirmation step.
+            'UPDATE' => 'MENUNGGU_KONFIRMASI_PIC',
+        ),
         'MENUNGGU_KONFIRMASI_PIC' => array(
             // Purchasing has completed its sole business review before the
             // PIC confirmation.  An accepted confirmation must therefore
@@ -99,6 +106,10 @@ function pojasa_next_status($currentStatus, $action, $departemen, $dirutOpsAppro
         'ON_PROGRESS' => array('PROGRESS' => 'ON_PROGRESS', 'SELESAI' => 'SELESAI'),
         'SELESAI' => array('TUTUP' => 'DITUTUP'),
     );
+
+    if (in_array($currentStatus, array('MENUNGGU_KADEP', 'PENDING_KADEP'), true) && $action === 'ACC') {
+        return pojasa_requires_dirut_ops($departemen, $nilaiJasa) ? 'MENUNGGU_DIRUT_OPS' : 'MENUNGGU_DIREKTUR';
+    }
 
     return isset($transitions[$currentStatus][$action]) ? $transitions[$currentStatus][$action] : false;
 }
@@ -142,7 +153,7 @@ function pojasa_workflow_actions($status)
         return array('ACC', 'REVISI', 'REJECT');
     }
     if ($status === 'MENUNGGU_PURCHASING_AWAL') {
-        return array('UPDATE');
+        return array('OK', 'REVISI');
     }
     if ($status === 'MENUNGGU_PURCHASING') {
         return array('SUBMIT');

@@ -84,8 +84,8 @@
               <thead>
                 <tr>
                   <th>Tanggal</th>
-                  <th>Vendor Usulan</th>
-                  <th>Total Estimasi</th>
+                  <th>Scope Pekerjaan</th>
+                  <th>Tujuan Pekerjaan</th>
                   <th>Status</th>
                   <th>Status PO Pembelian</th>
                   <th class="pojasa-pic-actions-column">Aksi</th>

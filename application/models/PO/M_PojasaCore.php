@@ -422,9 +422,30 @@ class M_PojasaCore extends CI_Model
             return array('success' => false, 'code' => 'INVALID_ACTION');
         }
         if ($stage === 'PURCHASING' && $request->status === 'MENUNGGU_PURCHASING_AWAL'
-            && $action === 'UPDATE' && empty($request->reviewed_at_purchasing)) {
+            && $action === 'OK' && empty($request->reviewed_at_purchasing)) {
             $this->db->trans_rollback();
             return array('success' => false, 'code' => 'PURCHASING_REVIEW_NOT_SAVED');
+        }
+        if ($stage === 'PURCHASING' && $request->status === 'MENUNGGU_PURCHASING_AWAL' && $action === 'OK') {
+            $activeVendor = !empty($request->kd_vendor_jasa)
+                ? $this->db->get_where('tbpo_jasa_vendor', array(
+                    'kd_vendor_jasa' => $request->kd_vendor_jasa,
+                    'status_vendor' => 'AKTIF',
+                    'deleted_at' => null,
+                ))->row()
+                : null;
+            if (!$activeVendor && trim((string) $request->vendor_usulan) === '') {
+                $this->db->trans_rollback();
+                return array('success' => false, 'code' => 'PURCHASING_VENDOR_REQUIRED');
+            }
+            $missingPrices = (int) $this->db->query(
+                "SELECT (SELECT COUNT(*) FROM tbpo_jasa_scope WHERE kd_po_jasa=? AND revision_no=? AND is_active=1 AND harga_pembanding_purchasing IS NULL) + (SELECT COUNT(*) FROM tbpo_jasa_material WHERE kd_po_jasa=? AND revision_no=? AND is_active=1 AND harga_pembanding_purchasing IS NULL) AS total",
+                array($requestCode, (int) $request->revision_no, $requestCode, (int) $request->revision_no)
+            )->row()->total;
+            if ($missingPrices > 0) {
+                $this->db->trans_rollback();
+                return array('success' => false, 'code' => 'PURCHASING_PRICES_REQUIRED');
+            }
         }
         $picConfirmation = $stage === 'PIC' && $action === 'ACC';
         if ((in_array($action, array('REVISI', 'REJECT', 'UPDATE'), true) || $picConfirmation) && trim((string) $note) === '') {
@@ -454,11 +475,16 @@ class M_PojasaCore extends CI_Model
             return array('success' => false, 'code' => 'SCHEDULE_REQUIRED');
         }
 
+        $jasaTotalRow = $this->db->query(
+            'SELECT COALESCE(SUM(qty * COALESCE(harga_pembanding_purchasing,0)),0) AS total FROM tbpo_jasa_scope WHERE kd_po_jasa=? AND revision_no=? AND is_active=1',
+            array($requestCode, (int) $request->revision_no)
+        )->row();
         $nextStatus = pojasa_next_status(
             $request->status,
             $action,
             $request->departemen,
-            (int) $request->dirut_ops_approved_revision === (int) $request->revision_no
+            (int) $request->dirut_ops_approved_revision === (int) $request->revision_no,
+            $jasaTotalRow ? (float) $jasaTotalRow->total : 0
         );
         if ($nextStatus === false) {
             $this->db->trans_rollback();

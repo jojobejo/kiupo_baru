@@ -95,7 +95,7 @@ class C_PojasaAjax extends CI_Controller
         if (!$this->validRequestCode($requestCode)) {
             $errors['kd_po_jasa'] = 'Kode request tidak valid.';
         }
-        if (!in_array($action, array('ACC', 'PENDING', 'REVISI', 'REJECT', 'SUBMIT', 'UPDATE', 'TERBITKAN'), true)) {
+        if (!in_array($action, array('OK', 'ACC', 'PENDING', 'REVISI', 'REJECT', 'SUBMIT', 'UPDATE', 'TERBITKAN'), true)) {
             $errors['action'] = 'Aksi approval tidak valid.';
         }
         if (in_array($action, array('REVISI', 'REJECT', 'UPDATE'), true) && $note === '') {
@@ -545,7 +545,9 @@ class C_PojasaAjax extends CI_Controller
             'INVALID_STATUS' => array(409, 'Status request tidak mengizinkan aksi ini.'),
             'INVALID_ACTION' => array(409, 'Aksi tidak sesuai dengan status atau role aktif.'),
             'NOTE_REQUIRED' => array(422, 'Catatan wajib diisi untuk revisi, update, atau konfirmasi PIC.'),
-            'PURCHASING_REVIEW_NOT_SAVED' => array(409, 'Simpan seluruh review Purchasing sebelum mengirim update ke PIC.'),
+            'PURCHASING_REVIEW_NOT_SAVED' => array(409, 'Simpan data review dan jadwal Purchasing sebelum memberi keputusan.'),
+            'PURCHASING_VENDOR_REQUIRED' => array(409, 'Purchasing harus memilih vendor aktif sebelum meneruskan request ke Kadep.'),
+            'PURCHASING_PRICES_REQUIRED' => array(409, 'Isi harga satuan Purchasing untuk seluruh scope dan material sebelum meneruskan request ke Kadep.'),
             'REVISION_NOT_SAVED' => array(409, 'Perbaikan revisi Purchasing wajib disimpan sebelum diajukan ulang.'),
             'SCHEDULE_REQUIRED' => array(422, 'Purchasing wajib menyimpan tanggal mulai dan selesai yang valid sebelum pengajuan final.'),
             'IDEMPOTENCY_CONFLICT' => array(409, 'Idempotency token sudah digunakan untuk request lain.'),

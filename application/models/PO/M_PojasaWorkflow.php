@@ -35,15 +35,20 @@ class M_PojasaWorkflow extends CI_Model
             'PIC' => array('MENUNGGU_KONFIRMASI_PIC'),
             'KADEP' => array('MENUNGGU_KADEP', 'PENDING_KADEP'),
             'PURCHASING' => array(
-                'MENUNGGU_PURCHASING_AWAL', 'MENUNGGU_PURCHASING', 'REVISI_PURCHASING_KADEP',
-                'REVISI_PURCHASING_DIROPS', 'REVISI_PURCHASING_DIRUT', 'MENUNGGU_PENERBITAN_PURCHASING', 'SPK_TERBIT',
+                'MENUNGGU_PURCHASING_AWAL', 'MENUNGGU_KONFIRMASI_PIC', 'MENUNGGU_KADEP', 'PENDING_KADEP',
+                'REVISI_PIC', 'REVISI_PURCHASING_KADEP', 'MENUNGGU_PURCHASING', 'MENUNGGU_DIRUT_OPS',
+                'MENUNGGU_PURCHASING_DIROPS', 'REVISI_PURCHASING_DIROPS', 'MENUNGGU_DIREKTUR',
+                'REVISI_PURCHASING_DIRUT', 'MENUNGGU_PENERBITAN_PURCHASING', 'SPK_TERBIT', 'ON_PROGRESS',
+                'SELESAI', 'DITUTUP', 'DITOLAK_KADEP', 'DITOLAK_DIRUT_OPS', 'DITOLAK_DIREKTUR',
             ),
             'DIREKTUR_OPERASIONAL' => array('MENUNGGU_DIRUT_OPS', 'SPK_TERBIT'),
             'DIREKTUR' => array('MENUNGGU_DIREKTUR', 'SPK_TERBIT'),
             'ADMIN' => array(
-                'MENUNGGU_PURCHASING_AWAL', 'MENUNGGU_PURCHASING', 'REVISI_PURCHASING_KADEP', 'REVISI_PURCHASING_DIROPS', 'REVISI_PURCHASING_DIRUT', 'MENUNGGU_PENERBITAN_PURCHASING', 'MENUNGGU_KADEP', 'PENDING_KADEP',
-                'MENUNGGU_KONFIRMASI_PIC',
-                'MENUNGGU_DIRUT_OPS', 'MENUNGGU_DIREKTUR', 'SPK_TERBIT',
+                'MENUNGGU_PURCHASING_AWAL', 'MENUNGGU_KONFIRMASI_PIC', 'MENUNGGU_KADEP', 'PENDING_KADEP',
+                'REVISI_PIC', 'MENUNGGU_PURCHASING', 'REVISI_PURCHASING_KADEP', 'MENUNGGU_DIRUT_OPS',
+                'MENUNGGU_PURCHASING_DIROPS', 'REVISI_PURCHASING_DIROPS', 'MENUNGGU_DIREKTUR',
+                'REVISI_PURCHASING_DIRUT', 'MENUNGGU_PENERBITAN_PURCHASING', 'SPK_TERBIT', 'ON_PROGRESS',
+                'SELESAI', 'DITUTUP', 'DITOLAK_KADEP', 'DITOLAK_DIRUT_OPS', 'DITOLAK_DIREKTUR',
             ),
         );
 
@@ -231,11 +236,11 @@ class M_PojasaWorkflow extends CI_Model
     public function get_purchasing_totals($requestCode, $revisionNo)
     {
         $scope = $this->db->query(
-            'SELECT COALESCE(SUM(qty * CASE WHEN COALESCE(harga_pembanding_purchasing, 0) > 0 THEN harga_pembanding_purchasing ELSE harga_estimasi END), 0) total FROM tbpo_jasa_scope WHERE kd_po_jasa=? AND revision_no=? AND is_active=1',
+            'SELECT COALESCE(SUM(qty * COALESCE(harga_pembanding_purchasing, 0)), 0) total FROM tbpo_jasa_scope WHERE kd_po_jasa=? AND revision_no=? AND is_active=1',
             array($requestCode, (int) $revisionNo)
         )->row();
         $material = $this->db->query(
-            'SELECT COALESCE(SUM(qty_kebutuhan * CASE WHEN COALESCE(harga_pembanding_purchasing, 0) > 0 THEN harga_pembanding_purchasing ELSE harga_estimasi END), 0) total FROM tbpo_jasa_material WHERE kd_po_jasa=? AND revision_no=? AND is_active=1',
+            'SELECT COALESCE(SUM(qty_kebutuhan * COALESCE(harga_pembanding_purchasing, 0)), 0) total FROM tbpo_jasa_material WHERE kd_po_jasa=? AND revision_no=? AND is_active=1',
             array($requestCode, (int) $revisionNo)
         )->row();
         $scopeTotal = (float) ($scope ? $scope->total : 0);
@@ -356,15 +361,18 @@ class M_PojasaWorkflow extends CI_Model
             foreach ($payload['materials'] as $row) $this->saveReviewMaterial($requestCode, $targetRevision, $row, $context);
         }
         $scopeTotal = (float) $this->db->query(
-            'SELECT COALESCE(SUM(total_estimasi),0) total FROM tbpo_jasa_scope WHERE kd_po_jasa=? AND revision_no=? AND is_active=1',
+            'SELECT COALESCE(SUM(qty * COALESCE(harga_pembanding_purchasing,0)),0) total FROM tbpo_jasa_scope WHERE kd_po_jasa=? AND revision_no=? AND is_active=1',
             array($requestCode, $targetRevision)
         )->row()->total;
         $materialTotal = (float) $this->db->query(
-            'SELECT COALESCE(SUM(total_estimasi),0) total FROM tbpo_jasa_material WHERE kd_po_jasa=? AND revision_no=? AND is_active=1',
+            'SELECT COALESCE(SUM(qty_kebutuhan * COALESCE(harga_pembanding_purchasing,0)),0) total FROM tbpo_jasa_material WHERE kd_po_jasa=? AND revision_no=? AND is_active=1',
             array($requestCode, $targetRevision)
         )->row()->total;
         $update = array(
             'estimasi_purchasing' => round($scopeTotal + $materialTotal, 2),
+            'estimasi_total_jasa' => round($scopeTotal, 2),
+            'estimasi_total_bahan' => round($materialTotal, 2),
+            'estimasi_total' => round($scopeTotal + $materialTotal, 2),
             'status_version' => (int) $request->status_version + 1,
         );
         if ($segment === 'purchasing') {
@@ -452,26 +460,24 @@ class M_PojasaWorkflow extends CI_Model
 
     private function saveReviewScope($requestCode, $revisionNo, $row, $context)
     {
-        $basePrice = $row['is_new'] ? (float) $row['harga_pembanding'] : null;
         $data = array('nama_scope' => $row['nama_scope'], 'deskripsi' => $row['deskripsi'], 'qty' => $row['qty'], 'satuan' => $row['satuan'], 'harga_pembanding_purchasing' => $row['harga_pembanding'], 'keterangan_purchasing' => $row['keterangan_purchasing']);
         if ($row['is_new']) {
-            $data += array('kd_po_jasa' => $requestCode, 'revision_no' => $revisionNo, 'line_no' => $this->nextLine('tbpo_jasa_scope', $requestCode, $revisionNo), 'jenis_scope' => 'JASA', 'harga_estimasi' => $basePrice, 'total_estimasi' => round($basePrice * $row['qty'], 2), 'added_by_purchasing' => 1, 'is_active' => 1);
+            $data += array('kd_po_jasa' => $requestCode, 'revision_no' => $revisionNo, 'line_no' => $this->nextLine('tbpo_jasa_scope', $requestCode, $revisionNo), 'jenis_scope' => 'JASA', 'harga_estimasi' => 0, 'total_estimasi' => round((float) $row['harga_pembanding'] * $row['qty'], 2), 'added_by_purchasing' => 1, 'is_active' => 1);
             $this->db->insert('tbpo_jasa_scope', $data); return;
         }
         $current = $this->db->get_where('tbpo_jasa_scope', array('id_scope' => (int) $row['id'], 'kd_po_jasa' => $requestCode, 'revision_no' => $revisionNo, 'is_active' => 1))->row_array();
-        if ($current) { $data['total_estimasi'] = round((float) $current['harga_estimasi'] * $row['qty'], 2); $this->db->where('id_scope', (int) $row['id'])->update('tbpo_jasa_scope', $data); }
+        if ($current) { $data['total_estimasi'] = round((float) $row['harga_pembanding'] * $row['qty'], 2); $this->db->where('id_scope', (int) $row['id'])->update('tbpo_jasa_scope', $data); }
     }
 
     private function saveReviewMaterial($requestCode, $revisionNo, $row, $context)
     {
-        $basePrice = $row['is_new'] ? (float) $row['harga_pembanding'] : null;
         $data = array('nama_material' => $row['nama_material'], 'deskripsi' => $row['deskripsi'], 'qty_kebutuhan' => $row['qty'], 'satuan' => $row['satuan'], 'harga_pembanding_purchasing' => $row['harga_pembanding'], 'keterangan_purchasing' => $row['keterangan_purchasing']);
         if ($row['is_new']) {
-            $data += array('kd_po_jasa' => $requestCode, 'revision_no' => $revisionNo, 'line_no' => $this->nextLine('tbpo_jasa_material', $requestCode, $revisionNo), 'id_brg_nk' => null, 'reference_type' => 'MANUAL', 'harga_estimasi' => $basePrice, 'total_estimasi' => round($basePrice * $row['qty'], 2), 'sumber_material' => 'MANUAL', 'created_by' => (int) $context['id_user'], 'added_by_purchasing' => 1, 'is_active' => 1);
+            $data += array('kd_po_jasa' => $requestCode, 'revision_no' => $revisionNo, 'line_no' => $this->nextLine('tbpo_jasa_material', $requestCode, $revisionNo), 'id_brg_nk' => null, 'reference_type' => 'MANUAL', 'harga_estimasi' => 0, 'total_estimasi' => round((float) $row['harga_pembanding'] * $row['qty'], 2), 'sumber_material' => 'MANUAL', 'created_by' => (int) $context['id_user'], 'added_by_purchasing' => 1, 'is_active' => 1);
             $this->db->insert('tbpo_jasa_material', $data); return;
         }
         $current = $this->db->get_where('tbpo_jasa_material', array('id_material' => (int) $row['id'], 'kd_po_jasa' => $requestCode, 'revision_no' => $revisionNo, 'is_active' => 1))->row_array();
-        if ($current) { $data['total_estimasi'] = round((float) $current['harga_estimasi'] * $row['qty'], 2); $this->db->where('id_material', (int) $row['id'])->update('tbpo_jasa_material', $data); }
+        if ($current) { $data['total_estimasi'] = round((float) $row['harga_pembanding'] * $row['qty'], 2); $this->db->where('id_material', (int) $row['id'])->update('tbpo_jasa_material', $data); }
     }
 
     private function nextLine($table, $requestCode, $revisionNo)

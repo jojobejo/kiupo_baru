@@ -22,16 +22,6 @@
     loadDocuments();
   }
 
-  $('#vendorCode').on('change', function() {
-    if ($(this).val()) {
-      $('#vendorProposal').val('');
-    }
-  });
-  $('#vendorProposal').on('input', function() {
-    if ($.trim($(this).val()) !== '') {
-      $('#vendorCode').val('');
-    }
-  });
   $('#documentFiles').on('change', function() {
     var count = this.files ? this.files.length : 0;
     var label = count === 1 ? this.files[0].name : (count > 1 ? count + ' file dipilih' : 'Pilih satu atau beberapa file');
@@ -50,7 +40,7 @@
     $(this).closest('tr').remove();
     calculateAll();
   });
-  $(document).on('input change', '.line-qty, .line-price', calculateAll);
+  $(document).on('input change', '.line-qty', calculateAll);
 
   $('#saveDraft').on('click', function() {
     saveDraft(false);
@@ -63,22 +53,13 @@
       return;
     }
     if (!documents.length) {
-      Swal.fire({
-        title: 'Dokumen pendukung belum ada',
-        text: 'Belum ada dokumen pendukung yang diunggah. Apakah request tetap ingin dilanjutkan?',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Ya, tetap lanjutkan',
-        cancelButtonText: 'Tidak, kembali'
-      }).then(function(result) {
-        if (result.value) confirmSubmit(true);
-      });
+      Swal.fire('Dokumen wajib diunggah', 'Unggah minimal satu dokumen pendukung sebelum mengajukan request.', 'warning');
       return;
     }
-    confirmSubmit(false);
+    confirmSubmit();
   });
 
-  function confirmSubmit(allowWithoutDocuments) {
+  function confirmSubmit() {
     Swal.fire({
       title: 'Ajukan request?',
       text: 'Data terbaru akan disimpan, lalu request dikirim ke Purchasing. Selama menunggu approval request tidak dapat diedit.',
@@ -90,7 +71,7 @@
       if (!result.value) {
         return;
       }
-      saveDraft(true, allowWithoutDocuments);
+      saveDraft(true, false);
     });
   }
 
@@ -192,10 +173,6 @@
     if (busy) {
       return;
     }
-    if (andSubmit && !$('#vendorCode').val() && $.trim($('#vendorProposal').val()) === '') {
-      Swal.fire('Vendor wajib ditentukan', 'Pilih vendor terdaftar atau isi nama vendor/toko secara manual.', 'warning');
-      return;
-    }
     setBusy(true);
     $.ajax({
       url: endpoints.save,
@@ -280,7 +257,7 @@
         deskripsi: $(this).find('.line-description').val(),
         qty: $(this).find('.line-qty').val(),
         satuan: $(this).find('.line-unit').val(),
-        harga_estimasi: $(this).find('.line-price').val()
+        harga_estimasi: 0
       });
     });
     var materials = [];
@@ -293,13 +270,11 @@
         deskripsi: $(this).find('.line-description').val(),
         qty_kebutuhan: $(this).find('.line-qty').val(),
         satuan: $(this).find('.line-unit').val(),
-        harga_estimasi: $(this).find('.line-price').val()
+        harga_estimasi: 0
       });
     });
     return {
       kd_po_jasa: requestCode,
-      kd_vendor_jasa: $('#vendorCode').val(),
-      vendor_usulan: $('#vendorProposal').val(),
       tgl_mulai_pekerjaan: $('#plannedStartDate').val(),
       tgl_selesai_pekerjaan: $('#plannedCompletionDate').val(),
       tujuan_pekerjaan: $('#workPurpose').val(),
@@ -318,10 +293,6 @@
     }
     function blank(value) { return $.trim(String(value || '')) === ''; }
 
-    var vendorCode = $('#vendorCode').val();
-    var vendorProposal = $('#vendorProposal').val();
-    if (!vendorCode && blank(vendorProposal)) missing('Vendor terdaftar atau Nama vendor / toko manual', $('#vendorCode'));
-    if (vendorCode && !blank(vendorProposal)) missing('Pilih hanya satu sumber vendor', $('#vendorCode'));
     if (blank($('#plannedStartDate').val())) missing('Tanggal rencana start pekerjaan', $('#plannedStartDate'));
     if (blank($('#plannedCompletionDate').val())) missing('Target penyelesaian', $('#plannedCompletionDate'));
     if ($('#plannedStartDate').val() && $('#plannedCompletionDate').val() && $('#plannedCompletionDate').val() < $('#plannedStartDate').val()) {
@@ -332,7 +303,7 @@
     var scopeRows = 0;
     $('#scopeTable tbody tr').each(function(index) {
       var row = $(this);
-      var values = [row.find('.line-name').val(), row.find('.line-description').val(), row.find('.line-qty').val(), row.find('.line-unit').val(), row.find('.line-price').val()];
+      var values = [row.find('.line-name').val(), row.find('.line-description').val(), row.find('.line-qty').val(), row.find('.line-unit').val()];
       if (values.every(blank)) return;
       scopeRows++;
       validateLine(row, 'Scope pekerjaan baris ' + (index + 1), errors, function(field) {
@@ -343,7 +314,7 @@
 
     $('#materialTable tbody tr').each(function(index) {
       var row = $(this);
-      var values = [row.find('.line-name').val(), row.find('.line-description').val(), row.find('.line-qty').val(), row.find('.line-unit').val(), row.find('.line-price').val()];
+      var values = [row.find('.line-name').val(), row.find('.line-description').val(), row.find('.line-qty').val(), row.find('.line-unit').val()];
       if (values.every(blank)) return;
       validateLine(row, 'Material / Alat dan Bahan baris ' + (index + 1), errors, function(field) {
         if (!firstField) firstField = field;
@@ -359,7 +330,6 @@
       { selector: '.line-description', label: 'Deskripsi' },
       { selector: '.line-qty', label: 'Qty' },
       { selector: '.line-unit', label: 'Satuan' },
-      { selector: '.line-price', label: 'Harga estimasi' }
     ];
     fields.forEach(function(item) {
       var field = row.find(item.selector);
@@ -429,24 +399,7 @@
     });
   }
 
-  function calculateAll() {
-    var scope = calculateTable('#scopeTable');
-    var material = calculateTable('#materialTable');
-    $('#scopeTotal').text(formatRupiah(scope));
-    $('#materialTotal').text(formatRupiah(material));
-  }
-
-  function calculateTable(selector) {
-    var total = 0;
-    $(selector + ' tbody tr').each(function() {
-      var qty = parseFloat($(this).find('.line-qty').val()) || 0;
-      var price = parseFloat($(this).find('.line-price').val()) || 0;
-      var subtotal = qty * price;
-      total += subtotal;
-      $(this).find('.line-subtotal').text(formatRupiah(subtotal));
-    });
-    return total;
-  }
+  function calculateAll() { return; }
 
   function loadDocuments() {
     if (!requestCode) {

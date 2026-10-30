@@ -321,12 +321,7 @@ class C_PojasaWorkflow extends CI_Controller
                 'deskripsi' => $description !== '' ? $description : null,
                 'satuan' => $unit,
             );
-            $purchasingNote = trim((string) (isset($row['keterangan_purchasing']) ? $row['keterangan_purchasing'] : ''));
-            if (mb_strlen($purchasingNote) > 5000 || ($price !== false && $purchasingNote === '')) {
-                $errors[($isScope ? 'scope_note_' : 'material_note_') . $index] = 'Keterangan Purchasing wajib diisi saat harga pembanding diisi.';
-                continue;
-            }
-            $cleanRow['keterangan_purchasing'] = $purchasingNote !== '' ? $purchasingNote : null;
+            $cleanRow['keterangan_purchasing'] = null;
             if (!$isScope && !$isNew) { $cleanRow['id_brg_nk'] = $source['id_brg_nk']; $cleanRow['reference_type'] = $source['reference_type']; }
             $clean[] = $cleanRow;
         }
@@ -426,15 +421,19 @@ class C_PojasaWorkflow extends CI_Controller
     private function datatableRow($row)
     {
         $request = (object) $row;
+        $role = $this->context()['role'];
         $actions = $this->M_PojasaWorkflow->allowed_actions($this->context(), $request);
         $process = $actions ? '<button type="button" class="btn btn-success btn-sm btn-workflow-process" data-code="' . htmlspecialchars($row['kd_po_jasa'], ENT_QUOTES, 'UTF-8') . '"><i class="fas fa-tasks"></i></button>' : '';
+        $total = in_array($role, array('PURCHASING', 'ADMIN'), true)
+            ? ($row['estimasi_purchasing'] === null ? '-' : 'Rp ' . number_format((float) $row['estimasi_purchasing'], 0, ',', '.'))
+            : 'Rp ' . number_format((float) $row['estimasi_total'], 0, ',', '.');
         return array(
             'tgl_request' => $row['tgl_request'],
             'kd_po_jasa' => htmlspecialchars($row['kd_po_jasa'], ENT_QUOTES, 'UTF-8'),
             'pic' => htmlspecialchars($row['nm_user'], ENT_QUOTES, 'UTF-8'),
             'departemen' => htmlspecialchars($row['departemen'], ENT_QUOTES, 'UTF-8'),
             'vendor' => htmlspecialchars((string) $row['nama_vendor_tampil'], ENT_QUOTES, 'UTF-8'),
-            'total' => 'Rp ' . number_format((float) $row['estimasi_total'], 0, ',', '.'),
+            'total' => $total,
             'status' => '<span class="badge badge-' . $this->statusColor($row['status']) . '">' . htmlspecialchars($row['status'], ENT_QUOTES, 'UTF-8') . '</span>',
             'actions' => '<a class="btn btn-info btn-sm mr-1" href="' . base_url('pojasa/workflow/detail/' . rawurlencode($row['kd_po_jasa'])) . '"><i class="fas fa-eye"></i></a>' . $process,
         );
